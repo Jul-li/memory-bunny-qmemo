@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "QMemo Cute",
+    "slug": "qmemo-cute",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "qmemo-cute",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#FFF6D7"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFF6D7"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

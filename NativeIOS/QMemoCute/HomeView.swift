@@ -34,7 +34,7 @@ struct HomeView: View {
                     Spacer()
                 }
                 .padding(.top, 10)
-                .zIndex(5)
+                .zIndex(8)
 
                 VStack(spacing: 0) {
                     Color.clear
@@ -74,7 +74,7 @@ struct HomeView: View {
                         Spacer()
                     }
                     .transition(.opacity)
-                    .zIndex(5)
+                    .zIndex(7)
                 }
 
                 VStack {
@@ -97,12 +97,12 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 12) {
+        ZStack(alignment: .trailing) {
             HStack(alignment: .center, spacing: 14) {
                 Image("Avatar")
                     .resizable()
+                    .scaledToFit()
                     .frame(width: 64, height: 64)
-                    .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("记忆兔")
@@ -114,22 +114,25 @@ struct HomeView: View {
                 }
 
                 Spacer()
-
-                Button {
-                    toggleSearch()
-                } label: {
-                    Image(searchIconName)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 42, height: 42)
-                        .frame(width: 54, height: 54)
-                        .scaleEffect(searchIconScale)
-                }
-                .buttonStyle(.plain)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, 68)
+
+            Button {
+                toggleSearch()
+            } label: {
+                Image(searchIconName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 42, height: 42)
+                    .frame(width: 54, height: 54)
+                    .scaleEffect(searchIconScale)
+            }
+            .buttonStyle(.plain)
         }
+        .frame(height: 64)
         .padding(.horizontal, 20)
-        .zIndex(5)
+        .zIndex(8)
     }
 
     private var searchBox: some View {

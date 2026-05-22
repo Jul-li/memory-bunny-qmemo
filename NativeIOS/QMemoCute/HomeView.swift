@@ -501,14 +501,23 @@ struct MemoCardView: View {
             .buttonStyle(.plain)
 
             Menu {
-                Button(memo.isPinned ? "取消置顶" : "置顶") {
+                Button {
                     store.togglePin(memo)
+                } label: {
+                    MemoActionMenuLabel(
+                        title: memo.isPinned ? "取消置顶" : "置顶",
+                        icon: memo.isPinned ? "ActionUnpin" : "ActionPin"
+                    )
                 }
-                Button("编辑") {
+                Button {
                     action()
+                } label: {
+                    MemoActionMenuLabel(title: "编辑", icon: "ActionEdit")
                 }
-                Button("删除", role: .destructive) {
+                Button(role: .destructive) {
                     store.delete(memo)
+                } label: {
+                    MemoActionMenuLabel(title: "删除", icon: "ActionDelete")
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -522,15 +531,43 @@ struct MemoCardView: View {
             .padding(.trailing, 18)
         }
         .contextMenu {
-            Button(memo.isPinned ? "取消置顶" : "置顶") {
+            Button {
                 store.togglePin(memo)
+            } label: {
+                MemoActionMenuLabel(
+                    title: memo.isPinned ? "取消置顶" : "置顶",
+                    icon: memo.isPinned ? "ActionUnpin" : "ActionPin"
+                )
             }
-            Button("编辑") {
+            Button {
                 action()
+            } label: {
+                MemoActionMenuLabel(title: "编辑", icon: "ActionEdit")
             }
-            Button("删除", role: .destructive) {
+            Button(role: .destructive) {
                 store.delete(memo)
+            } label: {
+                MemoActionMenuLabel(title: "删除", icon: "ActionDelete")
             }
+        }
+    }
+}
+
+struct MemoActionMenuLabel: View {
+    let title: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(icon)
+                .renderingMode(.original)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+
+            Text(title)
+
+            Spacer(minLength: 0)
         }
     }
 }

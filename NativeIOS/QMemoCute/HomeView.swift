@@ -31,6 +31,14 @@ struct HomeView: View {
 
                 VStack(spacing: 0) {
                     header
+                    Spacer()
+                }
+                .padding(.top, 10)
+                .zIndex(5)
+
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: 64)
                     categoryScroller
                     sectionHeader
                     memoList
@@ -56,14 +64,13 @@ struct HomeView: View {
                 }
 
                 if isSearchPresented {
-                    VStack(spacing: 0) {
-                        header
-                            .padding(.top, 10)
+                    VStack {
                         HStack {
                             Spacer()
                             searchBox
                         }
                         .padding(.horizontal, 20)
+                        .padding(.top, 74)
                         Spacer()
                     }
                     .transition(.opacity)
@@ -163,7 +170,7 @@ struct HomeView: View {
 
     private var categoryScroller: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 CategoryPill(title: "全部", icon: "CategoryAll", isSelected: selectedCategory == nil) {
                     selectedCategory = nil
                 }
@@ -175,8 +182,10 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
         }
+        .frame(height: 74)
     }
 
     private var sectionHeader: some View {
@@ -360,11 +369,11 @@ struct CategoryPill: View {
                     .resizable()
                     .frame(width: 24, height: 24)
                 Text(title)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(Theme.Colors.text)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(isSelected ? Theme.Colors.text : Theme.Colors.muted)
             }
-            .padding(.horizontal, 18)
-            .frame(height: 52)
+            .padding(.horizontal, 15)
+            .frame(height: 40)
             .background(isSelected ? Theme.Colors.cream : .white)
             .clipShape(Capsule())
             .overlay(Capsule().stroke(.white, lineWidth: isSelected ? 2 : 0))

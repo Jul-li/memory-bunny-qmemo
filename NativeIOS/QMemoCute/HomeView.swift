@@ -12,6 +12,7 @@ struct HomeView: View {
     @State private var selectedCategory: MemoCategory?
     @State private var editorRoute: EditorRoute?
     @State private var isCreateMenuPresented = false
+    @State private var isCreateMenuContentVisible = false
 
     private var filteredMemos: [Memo] {
         store.memos.filter { memo in
@@ -245,12 +246,17 @@ struct HomeView: View {
             if isCreateMenuPresented {
                 CreateMenuContentView { category in
                     withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.22)) {
+                        isCreateMenuContentVisible = false
                         isCreateMenuPresented = false
                     }
                     editorRoute = EditorRoute(category: category, memo: nil)
                 }
                 .padding(12)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .frame(width: 286, height: 404, alignment: .topLeading)
+                .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+                .opacity(isCreateMenuContentVisible ? 1 : 0)
+                .offset(y: isCreateMenuContentVisible ? 0 : 10)
+                .animation(.easeOut(duration: 0.18), value: isCreateMenuContentVisible)
             }
 
             if !isCreateMenuPresented {
@@ -259,7 +265,13 @@ struct HomeView: View {
                         isSearchPresented = false
                         searchIconName = "SearchIcon"
                         searchIconScale = 1
+                        isCreateMenuContentVisible = false
                         isCreateMenuPresented = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+                        if isCreateMenuPresented {
+                            isCreateMenuContentVisible = true
+                        }
                     }
                 } label: {
                     Color.clear
@@ -281,6 +293,7 @@ struct HomeView: View {
             closeSearch()
         }
         withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28)) {
+            isCreateMenuContentVisible = false
             isCreateMenuPresented = false
         }
         if shouldResetSearchIcon {
@@ -301,6 +314,7 @@ struct HomeView: View {
         searchBoxExpanded = false
         searchBoxChromeVisible = true
         withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30)) {
+            isCreateMenuContentVisible = false
             isCreateMenuPresented = false
             isSearchPresented = true
         }

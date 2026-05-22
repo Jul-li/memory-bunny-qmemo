@@ -66,7 +66,7 @@ function TabItem({ focused, label, source }: TabIconProps) {
   const labelWrapStyle = {
     width: progress.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, 44]
+      outputRange: [0, 40]
     }),
     marginLeft: progress.interpolate({
       inputRange: [0, 1],
@@ -85,6 +85,15 @@ function TabItem({ focused, label, source }: TabIconProps) {
 
   return (
     <Animated.View style={[styles.tabItem, itemStyle]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.tabItemInnerStroke,
+          {
+            opacity: progress
+          }
+        ]}
+      />
       <Animated.Image
         resizeMode="contain"
         source={source}
@@ -201,11 +210,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: 14
   },
+  tabItemInnerStroke: {
+    position: "absolute",
+    left: 3,
+    right: 3,
+    top: 3,
+    bottom: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#FDFDFB"
+  },
   tabLabel: {
     color: theme.colors.accentStrong,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
-    lineHeight: 24
+    lineHeight: 22
   },
   tabLabelWrap: {
     overflow: "hidden"

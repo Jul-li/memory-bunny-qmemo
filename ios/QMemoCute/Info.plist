@@ -28,12 +28,20 @@
         <key>CFBundleURLSchemes</key>
         <array>
           <string>qmemo-cute</string>
-          <string>com.julli.qmemocute</string>
+          <string>com.memorybunny.qmemo</string>
+        </array>
+      </dict>
+      <dict>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>exp+qmemo-cute</string>
         </array>
       </dict>
     </array>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
     <key>LSRequiresIPhoneOS</key>

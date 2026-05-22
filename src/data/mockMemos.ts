@@ -9,12 +9,12 @@ export const categories: MemoCategory[] = [
 ];
 
 export const memoColors: MemoCardColor[] = [
-  { id: "cream", name: "奶油黄", value: "#FFF0B8" },
-  { id: "pink", name: "浅粉", value: "#FFD7E5" },
-  { id: "mint", name: "薄荷绿", value: "#CFF5DD" },
-  { id: "sky", name: "天空蓝", value: "#CFEAFF" },
-  { id: "lavender", name: "棉花紫", value: "#E5D8FF" },
-  { id: "coral", name: "蜜桃橘", value: "#FFC7B8" }
+  { id: "cream", name: "奶油黄", value: "#FFF6CC" },
+  { id: "pink", name: "浅粉", value: "#FFE8F0" },
+  { id: "mint", name: "薄荷绿", value: "#E2FAEC" },
+  { id: "sky", name: "天空蓝", value: "#E1F4FF" },
+  { id: "lavender", name: "棉花紫", value: "#EFE8FF" },
+  { id: "coral", name: "蜜桃橘", value: "#FFDCD4" }
 ];
 
 export const mockMemos: Memo[] = [

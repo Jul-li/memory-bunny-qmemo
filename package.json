@@ -5,8 +5,14 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
+    "start:dev-client": "expo start --dev-client",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "ios:device": "expo run:ios --device",
+    "build:ios:dev": "eas build --platform ios --profile development",
+    "build:ios:preview": "eas build --platform ios --profile preview",
+    "build:ios:production": "eas build --platform ios --profile production",
+    "submit:ios": "eas submit --platform ios --profile production",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit"
   },
@@ -16,6 +22,7 @@
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.33",
     "expo-constants": "~18.0.10",
+    "expo-dev-client": "~6.0.21",
     "expo-linking": "~8.0.8",
     "expo-router": "~6.0.14",
     "expo-sqlite": "~16.0.8",

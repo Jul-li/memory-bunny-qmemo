@@ -31,6 +31,7 @@ struct HomeView: View {
                     memoList
                 }
                 .padding(.top, 10)
+                .zIndex(0)
 
                 if isSearchPresented || isCreateMenuPresented {
                     Button {
@@ -46,15 +47,28 @@ struct HomeView: View {
                     .zIndex(2)
                 }
 
+                if isSearchPresented {
+                    VStack(spacing: 0) {
+                        header
+                        Spacer()
+                    }
+                    .padding(.top, 10)
+                    .transition(.opacity)
+                    .zIndex(5)
+                }
+
                 VStack {
                     Spacer()
                     HStack {
                         Spacer()
-                        createEntry
+                        if !isSearchPresented {
+                            createEntry
+                        }
                     }
                     .padding(.trailing, 24)
                     .padding(.bottom, 120)
                 }
+                .zIndex(6)
             }
             .sheet(item: $editorRoute) { route in
                 MemoEditorView(category: route.category, memo: route.memo)

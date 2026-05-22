@@ -394,9 +394,20 @@ struct CategoryPill: View {
     let icon: String
     let isSelected: Bool
     let action: () -> Void
+    @State private var isSwitchAnimating = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            withAnimation(.easeOut(duration: 0.08)) {
+                isSwitchAnimating = true
+            }
+            action()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                withAnimation(.interpolatingSpring(stiffness: 220, damping: 16)) {
+                    isSwitchAnimating = false
+                }
+            }
+        } label: {
             HStack(spacing: 8) {
                 Image(icon)
                     .resizable()
@@ -412,6 +423,7 @@ struct CategoryPill: View {
             .overlay(Capsule().stroke(.white, lineWidth: isSelected ? 2 : 0))
             .shadow(color: Theme.Colors.shadow.opacity(isSelected ? 0.12 : 0.07), radius: 10, y: 5)
         }
+        .scaleEffect(isSwitchAnimating ? 0.95 : 1)
         .buttonStyle(CategoryPillPressStyle())
     }
 }
@@ -419,7 +431,7 @@ struct CategoryPill: View {
 struct CategoryPillPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
@@ -560,11 +572,11 @@ struct MemoCategoryBadge: View {
                         .frame(width: 24, height: 24)
                 }
 
-                Text(memo.category.title)
+                Text(memo.isPinned ? "置顶" : memo.category.title)
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(Theme.Colors.text)
             }
-            .padding(.leading, memo.isPinned ? 42 : 10)
+            .padding(.leading, memo.isPinned ? 62 : 10)
             .padding(.trailing, 10)
             .frame(height: 36)
             .background(memo.category.tint.opacity(0.55))
@@ -575,11 +587,12 @@ struct MemoCategoryBadge: View {
                 Image("CategoryPinned")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 32, height: 32)
+                    .frame(width: 56, height: 56)
                     .padding(.leading, 4)
                     .padding(.bottom, 2)
             }
         }
+        .frame(height: 36, alignment: .bottomLeading)
     }
 }
 

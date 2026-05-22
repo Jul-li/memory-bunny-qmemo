@@ -64,6 +64,12 @@ struct HomeView: View {
                     .zIndex(2)
                 }
 
+                if isSearchPresented && !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    searchResultsLayer
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .zIndex(5)
+                }
+
                 if isSearchPresented {
                     VStack {
                         HStack {
@@ -171,6 +177,53 @@ struct HomeView: View {
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30), value: searchBoxDropped)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34), value: searchBoxExpanded)
         .animation(.easeOut(duration: 0.12), value: searchBoxChromeVisible)
+    }
+
+    private var searchResultsLayer: some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: 158)
+
+            HStack {
+                Text("搜索结果")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(Theme.Colors.text)
+                Spacer()
+                Text("\(filteredMemos.count) 条")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.Colors.muted)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+
+            if filteredMemos.isEmpty {
+                VStack(spacing: 8) {
+                    Text("没有找到相关便签")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Theme.Colors.text)
+                    Text("换个关键词试试")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(Theme.Colors.muted)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 58)
+
+                Spacer(minLength: 0)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 18) {
+                        ForEach(filteredMemos) { memo in
+                            MemoCardView(memo: memo) {
+                                editorRoute = EditorRoute(category: memo.category, memo: memo)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 168)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var categoryScroller: some View {

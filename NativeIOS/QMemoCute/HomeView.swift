@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var searchIconScale = 1.0
     @State private var searchBoxDropped = false
     @State private var searchBoxExpanded = false
+    @State private var searchBoxChromeVisible = false
     @State private var selectedCategory: MemoCategory?
     @State private var editorRoute: EditorRoute?
     @State private var isCreateMenuPresented = false
@@ -35,7 +36,7 @@ struct HomeView: View {
                     memoList
                 }
                 .padding(.top, 10)
-                .blur(radius: isSearchPresented ? 24 : 0)
+                .blur(radius: isSearchPresented ? 16 : 0)
                 .animation(.easeOut(duration: 0.24), value: isSearchPresented)
                 .zIndex(0)
 
@@ -78,6 +79,8 @@ struct HomeView: View {
                     .padding(.trailing, 24)
                     .padding(.bottom, 120)
                 }
+                .blur(radius: isSearchPresented ? 16 : 0)
+                .animation(.easeOut(duration: 0.24), value: isSearchPresented)
                 .zIndex(isCreateMenuPresented ? 6 : 1)
             }
             .sheet(item: $editorRoute) { route in
@@ -145,16 +148,17 @@ struct HomeView: View {
         .padding(.horizontal, 18)
         .opacity(searchBoxExpanded ? 1 : 0)
         .frame(width: searchBoxExpanded ? UIScreen.main.bounds.width - 40 : 54, height: searchBoxDropped ? 60 : 54)
-        .background(.white)
+        .background(.white.opacity(searchBoxChromeVisible ? 1 : 0))
         .mask(RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous)
-                .stroke(Theme.Colors.line, lineWidth: 1)
+                .stroke(Theme.Colors.line.opacity(searchBoxChromeVisible ? 1 : 0), lineWidth: 1)
         )
-        .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 18, y: 8)
-        .offset(y: searchBoxDropped ? 0 : -44)
+        .shadow(color: Theme.Colors.shadow.opacity(searchBoxChromeVisible ? 0.14 : 0), radius: 18, y: 8)
+        .offset(y: searchBoxDropped ? 12 : -44)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30), value: searchBoxDropped)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34), value: searchBoxExpanded)
+        .animation(.easeOut(duration: 0.12), value: searchBoxChromeVisible)
     }
 
     private var categoryScroller: some View {
@@ -283,6 +287,7 @@ struct HomeView: View {
     private func openSearch() {
         searchBoxDropped = false
         searchBoxExpanded = false
+        searchBoxChromeVisible = true
         withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30)) {
             isCreateMenuPresented = false
             isSearchPresented = true
@@ -304,16 +309,20 @@ struct HomeView: View {
         withAnimation(.timingCurve(0.64, 0, 0.78, 0, duration: 0.22)) {
             searchBoxExpanded = false
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            searchBoxChromeVisible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
             withAnimation(.timingCurve(0.64, 0, 0.78, 0, duration: 0.22)) {
                 searchBoxDropped = false
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
             withAnimation(.timingCurve(0.64, 0, 0.78, 0, duration: 0.18)) {
                 isSearchPresented = false
                 searchText = ""
             }
+            searchBoxChromeVisible = false
         }
         animateSearchIcon(to: "SearchIcon")
     }

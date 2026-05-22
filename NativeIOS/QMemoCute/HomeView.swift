@@ -446,22 +446,7 @@ struct MemoCardView: View {
 
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 8) {
-                            HStack(spacing: 6) {
-                                Image(memo.isPinned ? "CategoryPinned" : memo.category.iconAsset)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: memo.isPinned ? 32 : 24, height: memo.isPinned ? 32 : 24)
-
-                                Text(memo.category.title)
-                                    .font(.system(size: 12, weight: .black))
-                                    .foregroundStyle(Theme.Colors.text)
-                            }
-                            .padding(.leading, memo.isPinned ? 2 : 10)
-                            .padding(.trailing, 10)
-                            .frame(height: 36)
-                            .background(memo.category.tint.opacity(0.55))
-                            .clipShape(Capsule())
-                            .overlay(Capsule().stroke(.white, lineWidth: 1))
+                            MemoCategoryBadge(memo: memo)
                         }
                         .padding(.bottom, 14)
 
@@ -548,6 +533,42 @@ struct MemoCardView: View {
                 store.delete(memo)
             } label: {
                 MemoActionMenuLabel(title: "删除", icon: "ActionDelete")
+            }
+        }
+    }
+}
+
+struct MemoCategoryBadge: View {
+    let memo: Memo
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            HStack(spacing: 6) {
+                if !memo.isPinned {
+                    Image(memo.category.iconAsset)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                }
+
+                Text(memo.category.title)
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(Theme.Colors.text)
+            }
+            .padding(.leading, memo.isPinned ? 42 : 10)
+            .padding(.trailing, 10)
+            .frame(height: 36)
+            .background(memo.category.tint.opacity(0.55))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(.white, lineWidth: 1))
+
+            if memo.isPinned {
+                Image("CategoryPinned")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 32, height: 32)
+                    .padding(.leading, 4)
+                    .padding(.bottom, 2)
             }
         }
     }

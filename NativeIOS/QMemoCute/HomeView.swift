@@ -245,11 +245,10 @@ struct HomeView: View {
 
             if isCreateMenuPresented {
                 CreateMenuContentView { category in
-                    withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.22)) {
-                        isCreateMenuContentVisible = false
-                        isCreateMenuPresented = false
+                    closeCreateMenu()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+                        editorRoute = EditorRoute(category: category, memo: nil)
                     }
-                    editorRoute = EditorRoute(category: category, memo: nil)
                 }
                 .padding(12)
                 .frame(width: 286, height: 404, alignment: .topLeading)
@@ -261,18 +260,7 @@ struct HomeView: View {
 
             if !isCreateMenuPresented {
                 Button {
-                    withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
-                        isSearchPresented = false
-                        searchIconName = "SearchIcon"
-                        searchIconScale = 1
-                        isCreateMenuContentVisible = false
-                        isCreateMenuPresented = true
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
-                        if isCreateMenuPresented {
-                            isCreateMenuContentVisible = true
-                        }
-                    }
+                    openCreateMenu()
                 } label: {
                     Color.clear
                         .frame(width: 74, height: 74)
@@ -292,9 +280,8 @@ struct HomeView: View {
         if isSearchPresented {
             closeSearch()
         }
-        withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28)) {
-            isCreateMenuContentVisible = false
-            isCreateMenuPresented = false
+        if isCreateMenuPresented {
+            closeCreateMenu()
         }
         if shouldResetSearchIcon {
             searchText = ""
@@ -313,9 +300,9 @@ struct HomeView: View {
         searchBoxDropped = false
         searchBoxExpanded = false
         searchBoxChromeVisible = true
+        isCreateMenuContentVisible = false
+        isCreateMenuPresented = false
         withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30)) {
-            isCreateMenuContentVisible = false
-            isCreateMenuPresented = false
             isSearchPresented = true
         }
         animateSearchIcon(to: "CloseIcon")
@@ -327,6 +314,34 @@ struct HomeView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
                 searchBoxExpanded = true
+            }
+        }
+    }
+
+    private func openCreateMenu() {
+        withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
+            isSearchPresented = false
+            searchIconName = "SearchIcon"
+            searchIconScale = 1
+            isCreateMenuContentVisible = false
+            isCreateMenuPresented = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+            if isCreateMenuPresented {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    isCreateMenuContentVisible = true
+                }
+            }
+        }
+    }
+
+    private func closeCreateMenu() {
+        withAnimation(.easeOut(duration: 0.10)) {
+            isCreateMenuContentVisible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28)) {
+                isCreateMenuPresented = false
             }
         }
     }

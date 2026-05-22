@@ -576,7 +576,7 @@ struct MemoCategoryBadge: View {
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(Theme.Colors.text)
             }
-            .padding(.leading, memo.isPinned ? 62 : 10)
+            .padding(.leading, memo.isPinned ? 50 : 10)
             .padding(.trailing, 10)
             .frame(height: 36)
             .background(memo.category.tint.opacity(0.55))
@@ -587,7 +587,7 @@ struct MemoCategoryBadge: View {
                 Image("CategoryPinned")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 56, height: 56)
+                    .frame(width: 44, height: 44)
                     .padding(.leading, 4)
                     .padding(.bottom, 2)
             }

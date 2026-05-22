@@ -190,6 +190,7 @@ struct HomeView: View {
             .padding(.bottom, 24)
         }
         .frame(height: 74)
+        .padding(.top, 8)
     }
 
     private var sectionHeader: some View {
@@ -411,7 +412,15 @@ struct CategoryPill: View {
             .overlay(Capsule().stroke(.white, lineWidth: isSelected ? 2 : 0))
             .shadow(color: Theme.Colors.shadow.opacity(isSelected ? 0.12 : 0.07), radius: 10, y: 5)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(CategoryPillPressStyle())
+    }
+}
+
+struct CategoryPillPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

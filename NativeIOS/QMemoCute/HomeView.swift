@@ -6,6 +6,8 @@ struct HomeView: View {
     @State private var isSearchPresented = false
     @State private var searchIconName = "SearchIcon"
     @State private var searchIconScale = 1.0
+    @State private var searchBoxDropped = false
+    @State private var searchBoxExpanded = false
     @State private var selectedCategory: MemoCategory?
     @State private var editorRoute: EditorRoute?
     @State private var isCreateMenuPresented = false
@@ -41,7 +43,8 @@ struct HomeView: View {
                     } label: {
                         Rectangle()
                             .fill(.ultraThinMaterial)
-                            .overlay(Theme.Colors.cream.opacity(0.38))
+                            .opacity(0.48)
+                            .overlay(Theme.Colors.cream.opacity(0.14))
                             .ignoresSafeArea()
                     }
                     .buttonStyle(.plain)
@@ -101,11 +104,8 @@ struct HomeView: View {
                     Image(searchIconName)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 28, height: 28)
+                        .frame(width: 42, height: 42)
                         .frame(width: 54, height: 54)
-                        .background(.white)
-                        .clipShape(Circle())
-                        .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 12, y: 5)
                         .scaleEffect(searchIconScale)
                 }
                 .buttonStyle(.plain)
@@ -113,7 +113,8 @@ struct HomeView: View {
 
             if isSearchPresented {
                 searchBox
-                    .transition(.scale(scale: 0.88, anchor: .topTrailing).combined(with: .opacity))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .transition(.opacity)
             }
         }
         .padding(.horizontal, 20)
@@ -141,11 +142,19 @@ struct HomeView: View {
             }
         }
         .padding(.horizontal, 18)
-        .frame(height: 60)
+        .opacity(searchBoxExpanded ? 1 : 0)
+        .frame(width: searchBoxExpanded ? UIScreen.main.bounds.width - 40 : 54, height: searchBoxDropped ? 60 : 54)
         .background(.white)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(Theme.Colors.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous)
+                .stroke(Theme.Colors.line, lineWidth: 1)
+        )
         .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 16, y: 7)
+        .offset(y: searchBoxDropped ? 0 : -44)
+        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30), value: searchBoxDropped)
+        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34), value: searchBoxExpanded)
+        .clipped()
     }
 
     private var categoryScroller: some View {
@@ -252,12 +261,13 @@ struct HomeView: View {
 
     private func closeOverlays() {
         let shouldResetSearchIcon = isSearchPresented || searchIconName != "SearchIcon"
+        if isSearchPresented {
+            closeSearch()
+        }
         withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28)) {
             isCreateMenuPresented = false
-            isSearchPresented = false
         }
         if shouldResetSearchIcon {
-            animateSearchIcon(to: "SearchIcon")
             searchText = ""
         }
     }
@@ -271,17 +281,39 @@ struct HomeView: View {
     }
 
     private func openSearch() {
+        searchBoxDropped = false
+        searchBoxExpanded = false
         withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30)) {
             isCreateMenuPresented = false
             isSearchPresented = true
         }
         animateSearchIcon(to: "CloseIcon")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30)) {
+                searchBoxDropped = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
+                searchBoxExpanded = true
+            }
+        }
     }
 
     private func closeSearch() {
-        withAnimation(.timingCurve(0.64, 0, 0.78, 0, duration: 0.30)) {
-            isSearchPresented = false
-            searchText = ""
+        withAnimation(.timingCurve(0.64, 0, 0.78, 0, duration: 0.22)) {
+            searchBoxExpanded = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(.timingCurve(0.64, 0, 0.78, 0, duration: 0.22)) {
+                searchBoxDropped = false
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+            withAnimation(.timingCurve(0.64, 0, 0.78, 0, duration: 0.18)) {
+                isSearchPresented = false
+                searchText = ""
+            }
         }
         animateSearchIcon(to: "SearchIcon")
     }
@@ -364,22 +396,22 @@ struct MemoCardView: View {
 
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 8) {
-                            ZStack(alignment: .leading) {
-                                Capsule()
-                                    .fill(memo.category.tint.opacity(0.55))
-                                    .overlay(Capsule().stroke(.white, lineWidth: 1))
-
+                            HStack(spacing: 6) {
                                 Image(memo.isPinned ? "CategoryPinned" : memo.category.iconAsset)
                                     .resizable()
                                     .scaledToFit()
                                     .frame(width: memo.isPinned ? 32 : 24, height: memo.isPinned ? 32 : 24)
-                                    .padding(.leading, memo.isPinned ? 2 : 10)
-                            }
-                            .frame(width: 46, height: 34)
 
-                            Text(memo.category.title)
-                                .font(.system(size: 15, weight: .black))
-                                .foregroundStyle(Theme.Colors.text)
+                                Text(memo.category.title)
+                                    .font(.system(size: 12, weight: .black))
+                                    .foregroundStyle(Theme.Colors.text)
+                            }
+                            .padding(.leading, memo.isPinned ? 2 : 10)
+                            .padding(.trailing, 10)
+                            .frame(height: 36)
+                            .background(memo.category.tint.opacity(0.55))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(.white, lineWidth: 1))
                         }
                         .padding(.bottom, 14)
 

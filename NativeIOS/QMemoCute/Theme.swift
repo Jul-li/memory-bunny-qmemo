@@ -4,9 +4,12 @@ enum Theme {
     enum Colors {
         static let background = Color(hex: "FFF6D7")
         static let surface = Color(hex: "FFFDF6")
+        static let surfaceStrong = Color(hex: "FFFFFF")
         static let text = Color(hex: "49392F")
         static let muted = Color(hex: "9C8577")
         static let line = Color(hex: "F2DFBF")
+        static let shadow = Color(hex: "C69C6D")
+        static let memoCard = Color(hex: "FFFDF5")
         static let cream = Color(hex: "FFF0B8")
         static let pink = Color(hex: "FFD7E5")
         static let mint = Color(hex: "CFF5DD")

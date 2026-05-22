@@ -223,14 +223,12 @@ struct HomeView: View {
     }
 
     private var createEntry: some View {
-        let collapsedSize: CGFloat = 62
-
-        return ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .bottomTrailing) {
             RoundedRectangle(cornerRadius: isCreateMenuPresented ? 34 : 37, style: .continuous)
-                .fill(isCreateMenuPresented ? .white : Theme.Colors.accent.opacity(0))
+                .fill(isCreateMenuPresented ? .white : Theme.Colors.accent)
                 .overlay(
                     RoundedRectangle(cornerRadius: isCreateMenuPresented ? 34 : 37, style: .continuous)
-                        .stroke(isCreateMenuPresented ? Theme.Colors.line : .white.opacity(0), lineWidth: isCreateMenuPresented ? 1 : 0)
+                        .stroke(isCreateMenuPresented ? Theme.Colors.line : .white, lineWidth: isCreateMenuPresented ? 1 : 5)
                 )
                 .shadow(
                     color: (isCreateMenuPresented ? Theme.Colors.shadow : Theme.Colors.accent).opacity(isCreateMenuPresented ? 0.18 : 0.35),
@@ -241,7 +239,11 @@ struct HomeView: View {
             Image("CreateEntryIcon")
                 .resizable()
                 .scaledToFit()
-                .frame(width: collapsedSize, height: collapsedSize)
+                .frame(width: isCreateMenuPresented ? 38 : 44, height: isCreateMenuPresented ? 38 : 44)
+                .frame(width: isCreateMenuPresented ? 62 : 74, height: isCreateMenuPresented ? 62 : 74)
+                .background(Theme.Colors.accent)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(.white, lineWidth: isCreateMenuPresented ? 4 : 0))
                 .opacity(isCreateMenuPresented ? 0 : 1)
 
             if isCreateMenuPresented {
@@ -264,13 +266,13 @@ struct HomeView: View {
                     openCreateMenu()
                 } label: {
                     Color.clear
-                        .frame(width: collapsedSize, height: collapsedSize)
+                        .frame(width: 74, height: 74)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
             }
         }
-        .frame(width: isCreateMenuPresented ? 286 : collapsedSize, height: isCreateMenuPresented ? 404 : collapsedSize)
+        .frame(width: isCreateMenuPresented ? 286 : 74, height: isCreateMenuPresented ? 404 : 74)
         .offset(y: isCreateMenuPresented ? -16 : 0)
         .scaleEffect(isCreateMenuPresented ? 1 : 1, anchor: .bottomTrailing)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.42), value: isCreateMenuPresented)

@@ -49,10 +49,6 @@ const allCategory = {
   icon: "albums" as keyof typeof Ionicons.glyphMap
 };
 
-const categoryScrollerOverflow = {
-  overflowY: "visible"
-} as const;
-
 export default function HomeScreen() {
   const router = useRouter();
   const { memos, isReady } = useMemos();
@@ -126,7 +122,7 @@ export default function HomeScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={[styles.categoryScroller, categoryScrollerOverflow]}
+          style={styles.categoryScroller}
           contentContainerStyle={styles.categoryList}
         >
           <CategoryPill

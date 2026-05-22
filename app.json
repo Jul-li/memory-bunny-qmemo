@@ -11,7 +11,8 @@
       "backgroundColor": "#FFF6D7"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.julli.qmemocute"
     },
     "android": {
       "adaptiveIcon": {

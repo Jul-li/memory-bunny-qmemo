@@ -11,7 +11,12 @@
       "backgroundColor": "#FFF6D7"
     },
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.memorybunny.qmemo",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {

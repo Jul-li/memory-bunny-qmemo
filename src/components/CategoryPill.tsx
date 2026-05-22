@@ -17,7 +17,8 @@ const categoryIconSources: Partial<Record<CategoryPillId, ImageSourcePropType>> 
   life: require("../../assets/category-icons/life.png"),
   todo: require("../../assets/category-icons/todo.png"),
   study: require("../../assets/category-icons/study.png"),
-  idea: require("../../assets/category-icons/idea.png")
+  idea: require("../../assets/category-icons/idea.png"),
+  diary: require("../../assets/category-icons/diary.png")
 };
 
 type CategoryPillProps = {

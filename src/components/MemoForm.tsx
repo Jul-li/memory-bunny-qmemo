@@ -1,8 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
-  Image,
-  ImageSourcePropType,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,16 +11,9 @@ import {
 
 import { IOS26Switch } from "@/components/IOS26Switch";
 import { theme } from "@/constants/theme";
-import { categories, memoColors } from "@/data/mockMemos";
+import { memoColors } from "@/data/mockMemos";
 import { MemoDraft } from "@/context/MemoContext";
 import { Memo, MemoCategoryId, MemoColorId } from "@/types/memo";
-
-const categoryIconSources: Partial<Record<MemoCategoryId, ImageSourcePropType>> = {
-  life: require("../../assets/category-icons/life.png"),
-  todo: require("../../assets/category-icons/todo.png"),
-  study: require("../../assets/category-icons/study.png"),
-  idea: require("../../assets/category-icons/idea.png")
-};
 
 type MemoFormProps = {
   initialCategoryId?: MemoCategoryId;
@@ -35,7 +26,7 @@ type MemoFormProps = {
 export function MemoForm({ initialCategoryId, memo, submitLabel, onSubmit, onDelete }: MemoFormProps) {
   const [title, setTitle] = useState(memo?.title ?? "");
   const [content, setContent] = useState(memo?.content ?? "");
-  const [categoryId, setCategoryId] = useState<MemoCategoryId>(memo?.categoryId ?? initialCategoryId ?? "life");
+  const categoryId = memo?.categoryId ?? initialCategoryId ?? "life";
   const [colorId, setColorId] = useState<MemoColorId>(memo?.colorId ?? "cream");
   const [isPinned, setIsPinned] = useState(memo?.isPinned ?? false);
   const [isSaving, setIsSaving] = useState(false);
@@ -82,39 +73,6 @@ export function MemoForm({ initialCategoryId, memo, submitLabel, onSubmit, onDel
         />
       </View>
 
-      <Text style={styles.label}>分类</Text>
-      <View style={styles.optionGrid}>
-        {categories.map((category) => {
-          const isActive = category.id === categoryId;
-          const iconSource = categoryIconSources[category.id];
-
-          return (
-            <Pressable
-              key={category.id}
-              onPress={() => setCategoryId(category.id)}
-              style={({ pressed }) => [
-                styles.categoryOption,
-                isActive && styles.activeCategoryOption,
-                pressed && styles.pressed
-              ]}
-            >
-              {iconSource ? (
-                <Image resizeMode="contain" source={iconSource} style={styles.categoryIconImage} />
-              ) : (
-                <Ionicons
-                  color={isActive ? theme.colors.text : theme.colors.muted}
-                  name={category.icon as keyof typeof Ionicons.glyphMap}
-                  size={24}
-                />
-              )}
-              <Text style={[styles.optionText, isActive && styles.activeOptionText]}>
-                {category.name}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
       <Text style={styles.label}>卡片颜色</Text>
       <View style={styles.colorRow}>
         {memoColors.map((color) => {
@@ -132,7 +90,7 @@ export function MemoForm({ initialCategoryId, memo, submitLabel, onSubmit, onDel
                 pressed && styles.pressed
               ]}
             >
-              {isActive ? <Ionicons color={theme.colors.text} name="checkmark" size={20} /> : null}
+              {isActive ? <Ionicons color={theme.colors.accentStrong} name="checkmark" size={20} /> : null}
             </Pressable>
           );
         })}
@@ -217,39 +175,6 @@ const styles = StyleSheet.create({
     outlineColor: "transparent",
     outlineWidth: 0
   },
-  optionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 9,
-    marginBottom: 18
-  },
-  categoryOption: {
-    height: 40,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 13,
-    borderRadius: 999,
-    backgroundColor: theme.colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: theme.colors.line
-  },
-  activeCategoryOption: {
-    backgroundColor: theme.colors.cream,
-    borderColor: "#F4C86B"
-  },
-  optionText: {
-    color: theme.colors.muted,
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  activeOptionText: {
-    color: theme.colors.text
-  },
-  categoryIconImage: {
-    width: 24,
-    height: 24
-  },
   colorRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -266,7 +191,7 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF"
   },
   activeColorSwatch: {
-    borderColor: theme.colors.text
+    borderColor: theme.colors.accent
   },
   pinRow: {
     minHeight: 66,

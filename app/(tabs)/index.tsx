@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -7,12 +7,15 @@ import {
   FlatList,
   Image,
   ImageSourcePropType,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  View
+  useWindowDimensions,
+  View,
+  ViewStyle
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -22,17 +25,41 @@ import { StickerEmptyState } from "@/components/StickerEmptyState";
 import { theme } from "@/constants/theme";
 import { useMemos } from "@/context/MemoContext";
 import { categories } from "@/data/mockMemos";
-import { MemoCategoryId } from "@/types/memo";
+import { Memo, MemoCategoryId } from "@/types/memo";
 
 type ActiveCategory = "all" | MemoCategoryId;
+type MemoActionAnchor = {
+  x: number;
+  y: number;
+  source: "longPress" | "more";
+  cardTop?: number;
+  cardBottom?: number;
+};
+type SearchEntryIconMode = "search" | "close";
+
+const actionMenuWidth = 184;
+const actionMenuEstimatedHeight = 166;
+const actionMenuBottomReservedHeight = 128;
+const actionMenuGap = 8;
+const searchBackdropBlurStyle = Platform.select({
+  web: {
+    backdropFilter: "blur(10px)",
+    WebkitBackdropFilter: "blur(10px)"
+  } as unknown as ViewStyle,
+  default: {}
+});
 
 const avatarSource = require("../../assets/profile-icons/avatar.png");
+const appLogoSource = require("../../assets/brand/app_logo.svg");
+const searchIconSource = require("../../assets/action-icons/search.png");
+const closeIconSource = require("../../assets/action-icons/close.png");
 
 const categoryIconSources: Partial<Record<MemoCategoryId, ImageSourcePropType>> = {
   life: require("../../assets/category-icons/life.png"),
   todo: require("../../assets/category-icons/todo.png"),
   study: require("../../assets/category-icons/study.png"),
-  idea: require("../../assets/category-icons/idea.png")
+  idea: require("../../assets/category-icons/idea.png"),
+  diary: require("../../assets/category-icons/diary.png")
 };
 
 const createMenuDescriptions: Record<MemoCategoryId, string> = {
@@ -54,13 +81,75 @@ const categoryScrollerOverflow = {
 } as const;
 
 export default function HomeScreen() {
+  const pathname = usePathname();
   const router = useRouter();
-  const { memos, isReady } = useMemos();
+  const { deleteMemo, memos, isReady, saveMemo } = useMemos();
+  const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const [searchText, setSearchText] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [shouldRenderSearch, setShouldRenderSearch] = useState(false);
+  const [searchEntryIconMode, setSearchEntryIconMode] = useState<SearchEntryIconMode>("search");
   const [activeCategory, setActiveCategory] = useState<ActiveCategory>("all");
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const [shouldRenderCreateMenu, setShouldRenderCreateMenu] = useState(false);
+  const [actionMenuMemo, setActionMenuMemo] = useState<Memo | null>(null);
+  const [actionMenuAnchor, setActionMenuAnchor] = useState<MemoActionAnchor | null>(null);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [shouldRenderActionMenu, setShouldRenderActionMenu] = useState(false);
   const createMenuProgress = useRef(new Animated.Value(0)).current;
+  const actionMenuProgress = useRef(new Animated.Value(0)).current;
+  const searchProgress = useRef(new Animated.Value(0)).current;
+  const searchEntryIconProgress = useRef(new Animated.Value(1)).current;
+  const searchInputRef = useRef<TextInput>(null);
+  const searchIconSwapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchIconSwapTimerRef.current) {
+        clearTimeout(searchIconSwapTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pathname !== "/") {
+      setIsCreateMenuOpen(false);
+      setIsActionMenuOpen(false);
+      setIsSearchOpen(false);
+      setSearchEntryIconMode("search");
+      searchEntryIconProgress.setValue(1);
+    }
+  }, [pathname, searchEntryIconProgress]);
+
+  useEffect(() => {
+    if (isSearchOpen) {
+      setShouldRenderSearch(true);
+
+      Animated.timing(searchProgress, {
+        toValue: 1,
+        duration: 460,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+        useNativeDriver: false
+      }).start(({ finished }) => {
+        if (finished) {
+          searchInputRef.current?.focus();
+        }
+      });
+      return;
+    }
+
+    Animated.timing(searchProgress, {
+      toValue: 0,
+      duration: 360,
+      easing: Easing.bezier(0.64, 0, 0.78, 0),
+      useNativeDriver: false
+    }).start(({ finished }) => {
+      if (finished && !isSearchOpen) {
+        setShouldRenderSearch(false);
+        setSearchText("");
+      }
+    });
+  }, [isSearchOpen, searchProgress]);
 
   useEffect(() => {
     if (isCreateMenuOpen) {
@@ -79,6 +168,150 @@ export default function HomeScreen() {
     });
   }, [createMenuProgress, isCreateMenuOpen]);
 
+  useEffect(() => {
+    if (isActionMenuOpen) {
+      setShouldRenderActionMenu(true);
+
+      Animated.spring(actionMenuProgress, {
+        toValue: 1,
+        friction: 7,
+        tension: 120,
+        useNativeDriver: true
+      }).start();
+      return;
+    }
+
+    Animated.timing(actionMenuProgress, {
+      toValue: 0,
+      duration: 180,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true
+    }).start(({ finished }) => {
+      if (finished && !isActionMenuOpen) {
+        setShouldRenderActionMenu(false);
+        setActionMenuMemo(null);
+        setActionMenuAnchor(null);
+      }
+    });
+  }, [actionMenuProgress, isActionMenuOpen]);
+
+  const openMemoActionMenu = (memo: Memo, anchor: MemoActionAnchor) => {
+    setIsCreateMenuOpen(false);
+    actionMenuProgress.setValue(0);
+    setActionMenuMemo(memo);
+    setActionMenuAnchor(anchor);
+    setShouldRenderActionMenu(true);
+    setIsActionMenuOpen(true);
+  };
+
+  const closeMemoActionMenu = () => {
+    setIsActionMenuOpen(false);
+  };
+
+  const openSearch = () => {
+    if (searchIconSwapTimerRef.current) {
+      clearTimeout(searchIconSwapTimerRef.current);
+    }
+
+    setIsCreateMenuOpen(false);
+    setIsActionMenuOpen(false);
+    searchProgress.setValue(0);
+    setShouldRenderSearch(true);
+    setSearchEntryIconMode("search");
+    searchEntryIconProgress.setValue(1);
+    setIsSearchOpen(true);
+
+    Animated.timing(searchEntryIconProgress, {
+      toValue: 0,
+      duration: 150,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true
+    }).start();
+
+    searchIconSwapTimerRef.current = setTimeout(() => {
+      setSearchEntryIconMode("close");
+      searchEntryIconProgress.setValue(0);
+      Animated.spring(searchEntryIconProgress, {
+        toValue: 1,
+        friction: 5,
+        tension: 170,
+        useNativeDriver: true
+      }).start();
+    }, 150);
+  };
+
+  const closeSearch = () => {
+    if (searchIconSwapTimerRef.current) {
+      clearTimeout(searchIconSwapTimerRef.current);
+    }
+
+    Animated.timing(searchEntryIconProgress, {
+      toValue: 0,
+      duration: 150,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true
+    }).start();
+
+    searchIconSwapTimerRef.current = setTimeout(() => {
+      setSearchEntryIconMode("search");
+      searchEntryIconProgress.setValue(0);
+      Animated.spring(searchEntryIconProgress, {
+        toValue: 1,
+        friction: 5,
+        tension: 170,
+        useNativeDriver: true
+      }).start();
+    }, 150);
+
+    setIsSearchOpen(false);
+  };
+
+  const toggleSearch = () => {
+    if (isSearchOpen) {
+      closeSearch();
+      return;
+    }
+
+    openSearch();
+  };
+
+  const handleTogglePin = async () => {
+    if (!actionMenuMemo) {
+      return;
+    }
+
+    const memo = actionMenuMemo;
+    closeMemoActionMenu();
+    await saveMemo({
+      id: memo.id,
+      title: memo.title,
+      content: memo.content,
+      categoryId: memo.categoryId,
+      colorId: memo.colorId,
+      isPinned: !memo.isPinned
+    });
+  };
+
+  const handleDeleteMemo = async () => {
+    if (!actionMenuMemo) {
+      return;
+    }
+
+    const id = actionMenuMemo.id;
+    closeMemoActionMenu();
+    await deleteMemo(id);
+  };
+
+  const handleEditMemo = () => {
+    if (!actionMenuMemo) {
+      return;
+    }
+
+    const id = actionMenuMemo.id;
+    closeMemoActionMenu();
+    router.push(`/memo/${id}`);
+  };
+
   const filteredMemos = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
 
@@ -94,33 +327,142 @@ export default function HomeScreen() {
       .sort((a, b) => Number(b.isPinned) - Number(a.isPinned));
   }, [activeCategory, memos, searchText]);
 
+  const actionMenuPosition = useMemo(() => {
+    const fallbackX = viewportWidth - theme.spacing.page - actionMenuWidth;
+    const fallbackY = viewportHeight / 2;
+    const anchorX = actionMenuAnchor?.x ?? fallbackX;
+    const anchorY = actionMenuAnchor?.y ?? fallbackY;
+    const cardTop = actionMenuAnchor?.cardTop;
+    const bottomLimit = viewportHeight - actionMenuBottomReservedHeight - actionMenuEstimatedHeight;
+    const shouldOpenAbove =
+      actionMenuAnchor?.source === "longPress" &&
+      cardTop !== undefined &&
+      anchorY > bottomLimit;
+    const top = shouldOpenAbove
+      ? Math.max(theme.spacing.page, cardTop - actionMenuEstimatedHeight - actionMenuGap)
+      : Math.min(
+          Math.max(anchorY, theme.spacing.page),
+          Math.max(theme.spacing.page, bottomLimit)
+        );
+
+    return {
+      placement: shouldOpenAbove ? "above" : "below",
+      style: {
+        left: Math.min(
+          Math.max(anchorX - actionMenuWidth / 2, theme.spacing.page),
+          viewportWidth - actionMenuWidth - theme.spacing.page
+        ),
+        top
+      }
+    };
+  }, [actionMenuAnchor, viewportHeight, viewportWidth]);
+
+  const searchSlotStyle = {
+    height: searchProgress.interpolate({
+      inputRange: [0, 0.24, 1],
+      outputRange: [0, 20, 70]
+    }),
+    opacity: searchProgress.interpolate({
+      inputRange: [0, 0.08, 1],
+      outputRange: [0, 1, 1]
+    })
+  };
+
+  const searchBoxStyle = {
+    width: searchProgress.interpolate({
+      inputRange: [0, 0.24, 1],
+      outputRange: [44, 44, viewportWidth - theme.spacing.page * 2]
+    }),
+    height: searchProgress.interpolate({
+      inputRange: [0, 0.24, 1],
+      outputRange: [44, 44, 52]
+    }),
+    borderRadius: searchProgress.interpolate({
+      inputRange: [0, 0.24, 1],
+      outputRange: [22, 22, theme.radius.lg]
+    }),
+    opacity: searchProgress.interpolate({
+      inputRange: [0, 0.06, 1],
+      outputRange: [0, 1, 1]
+    }),
+    transform: [
+      {
+        translateY: searchProgress.interpolate({
+          inputRange: [0, 0.24, 1],
+          outputRange: [-58, -46, 0]
+        })
+      },
+      {
+        scale: searchProgress.interpolate({
+          inputRange: [0, 0.2, 1],
+          outputRange: [0.86, 0.94, 1]
+        })
+      }
+    ]
+  };
+
+  const searchEntryIconStyle = {
+    transform: [
+      {
+        scale: searchEntryIconProgress
+      }
+    ]
+  };
+
+  const searchBoxContentStyle = {
+    opacity: searchProgress.interpolate({
+      inputRange: [0, 0.48, 1],
+      outputRange: [0, 0, 1]
+    })
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Image resizeMode="contain" source={avatarSource} style={styles.avatarImage} />
+        <View style={styles.headerBrand}>
+          <View style={styles.avatar}>
+            <Image resizeMode="contain" source={avatarSource} style={styles.avatarImage} />
+          </View>
+          <View style={styles.headerText}>
+            <Image resizeMode="contain" source={appLogoSource} style={styles.logoImage} />
+            <Text style={styles.title}>今天想记点什么？</Text>
+          </View>
         </View>
-        <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>记忆兔</Text>
-          <Text style={styles.title}>今天想记点什么？</Text>
-        </View>
+        <Pressable
+          accessibilityLabel={isSearchOpen ? "关闭搜索" : "打开搜索"}
+          onPress={toggleSearch}
+          style={({ pressed }) => [styles.searchEntry, pressed && styles.searchEntryPressed]}
+        >
+          <Animated.Image
+            resizeMode="contain"
+            source={searchEntryIconMode === "close" ? closeIconSource : searchIconSource}
+            style={[styles.searchEntryIcon, searchEntryIconStyle]}
+          />
+        </Pressable>
       </View>
 
-      <View style={styles.searchBox}>
-        <Ionicons color={theme.colors.muted} name="search" size={20} />
-        <TextInput
-          placeholder="搜索灵感、待办或小心情"
-          placeholderTextColor={theme.colors.muted}
-          value={searchText}
-          onChangeText={setSearchText}
-          style={styles.searchInput}
-        />
-        {searchText ? (
-          <Pressable onPress={() => setSearchText("")} style={styles.clearButton}>
-            <Ionicons color={theme.colors.muted} name="close" size={16} />
-          </Pressable>
-        ) : null}
-      </View>
+      {shouldRenderSearch ? (
+        <Animated.View style={[styles.searchSlot, searchSlotStyle]}>
+          <Animated.View style={[styles.searchBox, searchBoxStyle]}>
+            <Animated.View style={[styles.searchBoxContent, searchBoxContentStyle]}>
+              <Ionicons color={theme.colors.muted} name="search" size={20} />
+              <TextInput
+                ref={searchInputRef}
+                placeholder="搜索灵感、待办或小心情"
+                placeholderTextColor={theme.colors.muted}
+                value={searchText}
+                onChangeText={setSearchText}
+                style={styles.searchInput}
+              />
+              {searchText ? (
+                <Pressable onPress={() => setSearchText("")} style={styles.clearButton}>
+                  <Ionicons color={theme.colors.muted} name="close" size={16} />
+                </Pressable>
+              ) : null}
+            </Animated.View>
+          </Animated.View>
+        </Animated.View>
+      ) : null}
 
       <View style={styles.categorySection}>
         <ScrollView
@@ -145,20 +487,25 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
 
+      <View style={styles.listHeader}>
+        <Text style={styles.sectionTitle}>我的便签</Text>
+        <Text style={styles.count}>{isReady ? `${filteredMemos.length} 条` : "加载中"}</Text>
+      </View>
+
       <FlatList
         data={filteredMemos}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <MemoCard memo={item} onPress={() => router.push(`/memo/${item.id}`)} />
+          <MemoCard
+            memo={item}
+            onLongPress={openMemoActionMenu}
+            onMorePress={openMemoActionMenu}
+            onPress={() => router.push(`/memo/${item.id}`)}
+          />
         )}
         showsVerticalScrollIndicator={false}
+        style={styles.memoScroller}
         contentContainerStyle={styles.memoList}
-        ListHeaderComponent={
-          <View style={styles.listHeader}>
-            <Text style={styles.sectionTitle}>我的便签</Text>
-            <Text style={styles.count}>{isReady ? `${filteredMemos.length} 条` : "加载中"}</Text>
-          </View>
-        }
         ListEmptyComponent={
           <StickerEmptyState
             title="这里还空空软软的"
@@ -166,6 +513,29 @@ export default function HomeScreen() {
           />
         }
       />
+
+      {shouldRenderSearch ? (
+        <Animated.View
+          pointerEvents={isSearchOpen ? "auto" : "none"}
+          style={[
+            styles.searchDismissLayer,
+            {
+              opacity: searchProgress.interpolate({
+                inputRange: [0, 0.46, 1],
+                outputRange: [0, 0, 1]
+              })
+            }
+          ]}
+        >
+          <Pressable
+            accessibilityLabel="关闭搜索"
+            onPress={closeSearch}
+            style={styles.searchDismissTapTarget}
+          >
+            <View pointerEvents="none" style={[styles.searchBlurBackdrop, searchBackdropBlurStyle]} />
+          </Pressable>
+        </Animated.View>
+      ) : null}
 
       {!shouldRenderCreateMenu ? (
         <Pressable
@@ -306,6 +676,75 @@ export default function HomeScreen() {
           </Animated.View>
         </Animated.View>
       ) : null}
+
+      {shouldRenderActionMenu ? (
+        <Animated.View
+          pointerEvents={isActionMenuOpen ? "auto" : "none"}
+          style={[
+            styles.actionBackdropWrap,
+            {
+              opacity: actionMenuProgress
+            }
+          ]}
+        >
+          <Pressable
+            accessibilityLabel="关闭便签操作菜单"
+            onPress={closeMemoActionMenu}
+            style={styles.actionBackdropTapTarget}
+          >
+            <View pointerEvents="none" style={[styles.actionBackdrop, searchBackdropBlurStyle]} />
+          </Pressable>
+        </Animated.View>
+      ) : null}
+
+      {shouldRenderActionMenu && actionMenuMemo ? (
+        <Animated.View
+          pointerEvents={isActionMenuOpen ? "auto" : "none"}
+          style={[
+            styles.actionMenu,
+            actionMenuPosition.style,
+            {
+              opacity: actionMenuProgress,
+              transform: [
+                {
+                  translateY: actionMenuProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [actionMenuPosition.placement === "above" ? 10 : -10, 0]
+                  })
+                },
+                {
+                  scale: actionMenuProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.86, 1]
+                  })
+                }
+              ]
+            }
+          ]}
+        >
+          <Pressable
+            onPress={handleTogglePin}
+            style={({ pressed }) => [styles.actionMenuItem, pressed && styles.actionMenuItemPressed]}
+          >
+            <Ionicons color={theme.colors.text} name={actionMenuMemo.isPinned ? "remove-circle" : "push"} size={20} />
+            <Text style={styles.actionMenuText}>{actionMenuMemo.isPinned ? "取消置顶" : "置顶"}</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleDeleteMemo}
+            style={({ pressed }) => [styles.actionMenuItem, pressed && styles.actionMenuItemPressed]}
+          >
+            <Ionicons color={theme.colors.accentStrong} name="trash" size={20} />
+            <Text style={[styles.actionMenuText, styles.actionMenuDangerText]}>删除</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleEditMemo}
+            style={({ pressed }) => [styles.actionMenuItem, pressed && styles.actionMenuItemPressed]}
+          >
+            <Ionicons color={theme.colors.text} name="create" size={20} />
+            <Text style={styles.actionMenuText}>编辑</Text>
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -316,27 +755,32 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background
   },
   header: {
+    position: "relative",
+    zIndex: 8,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.page,
     paddingTop: 10,
     paddingBottom: 16
   },
+  headerBrand: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
   headerText: {
     marginLeft: 12
   },
-  eyebrow: {
-    color: "#411F0B",
-    fontSize: 32,
-    lineHeight: 38,
-    fontWeight: "900",
+  logoImage: {
+    width: 104,
+    height: 40,
     marginBottom: 4
   },
   title: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 16,
     lineHeight: 22,
-    fontWeight: "900"
+    fontWeight: "400"
   },
   avatar: {
     width: 64,
@@ -352,13 +796,31 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64
   },
-  searchBox: {
-    minHeight: 52,
-    flexDirection: "row",
+  searchEntry: {
+    width: 52,
+    height: 52,
     alignItems: "center",
-    marginHorizontal: theme.spacing.page,
-    paddingHorizontal: 16,
-    borderRadius: theme.radius.lg,
+    justifyContent: "center",
+    borderRadius: 26
+  },
+  searchEntryPressed: {
+    transform: [{ scale: 0.94 }]
+  },
+  searchEntryIcon: {
+    width: 42,
+    height: 42
+  },
+  searchSlot: {
+    position: "relative",
+    zIndex: 8,
+    overflow: "visible"
+  },
+  searchBox: {
+    position: "absolute",
+    right: theme.spacing.page,
+    top: 0,
+    zIndex: 8,
+    overflow: "hidden",
     backgroundColor: theme.colors.surfaceStrong,
     borderWidth: 1,
     borderColor: theme.colors.line,
@@ -367,6 +829,13 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 2
+  },
+  searchBoxContent: {
+    flex: 1,
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16
   },
   searchInput: {
     flex: 1,
@@ -383,6 +852,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 14,
     backgroundColor: "#F8ECD8"
+  },
+  searchDismissLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 7
+  },
+  searchDismissTapTarget: {
+    ...StyleSheet.absoluteFillObject
+  },
+  searchBlurBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,248,229,0.68)"
   },
   categorySection: {
     marginTop: 16,
@@ -402,14 +882,18 @@ const styles = StyleSheet.create({
   },
   memoList: {
     paddingHorizontal: theme.spacing.page,
-    paddingTop: 18,
+    paddingTop: 12,
     paddingBottom: 112
+  },
+  memoScroller: {
+    flex: 1
   },
   listHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12
+    marginTop: 18,
+    paddingHorizontal: theme.spacing.page
   },
   sectionTitle: {
     color: theme.colors.text,
@@ -510,5 +994,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 18
+  },
+  actionBackdropWrap: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9
+  },
+  actionBackdropTapTarget: {
+    ...StyleSheet.absoluteFillObject
+  },
+  actionBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,248,229,0.68)"
+  },
+  actionMenu: {
+    position: "absolute",
+    zIndex: 10,
+    width: actionMenuWidth,
+    padding: 8,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surfaceStrong,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.82)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 12
+  },
+  actionMenuItem: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    borderRadius: theme.radius.sm
+  },
+  actionMenuItemPressed: {
+    backgroundColor: "#F3F0EA",
+    transform: [{ scale: 0.98 }]
+  },
+  actionMenuText: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  actionMenuDangerText: {
+    color: theme.colors.accentStrong
   }
 });

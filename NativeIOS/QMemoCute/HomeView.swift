@@ -4,6 +4,8 @@ struct HomeView: View {
     @EnvironmentObject private var store: MemoStore
     @State private var searchText = ""
     @State private var isSearchPresented = false
+    @State private var searchIconName = "SearchIcon"
+    @State private var searchIconScale = 1.0
     @State private var selectedCategory: MemoCategory?
     @State private var editorRoute: EditorRoute?
     @State private var isCreateMenuPresented = false
@@ -38,8 +40,8 @@ struct HomeView: View {
                         closeOverlays()
                     } label: {
                         Rectangle()
-                            .fill(Theme.Colors.cream.opacity(0.42))
-                            .background(.ultraThinMaterial.opacity(0.72))
+                            .fill(.ultraThinMaterial)
+                            .overlay(Theme.Colors.cream.opacity(0.38))
                             .ignoresSafeArea()
                     }
                     .buttonStyle(.plain)
@@ -61,14 +63,12 @@ struct HomeView: View {
                     Spacer()
                     HStack {
                         Spacer()
-                        if !isSearchPresented {
-                            createEntry
-                        }
+                        createEntry
                     }
                     .padding(.trailing, 24)
                     .padding(.bottom, 120)
                 }
-                .zIndex(6)
+                .zIndex(isCreateMenuPresented ? 6 : 1)
             }
             .sheet(item: $editorRoute) { route in
                 MemoEditorView(category: route.category, memo: route.memo)
@@ -96,15 +96,9 @@ struct HomeView: View {
                 Spacer()
 
                 Button {
-                    withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
-                        isCreateMenuPresented = false
-                        if isSearchPresented {
-                            searchText = ""
-                        }
-                        isSearchPresented.toggle()
-                    }
+                    toggleSearch()
                 } label: {
-                    Image(isSearchPresented ? "CloseIcon" : "SearchIcon")
+                    Image(searchIconName)
                         .resizable()
                         .scaledToFit()
                         .frame(width: 28, height: 28)
@@ -112,6 +106,7 @@ struct HomeView: View {
                         .background(.white)
                         .clipShape(Circle())
                         .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 12, y: 5)
+                        .scaleEffect(searchIconScale)
                 }
                 .buttonStyle(.plain)
             }
@@ -201,41 +196,106 @@ struct HomeView: View {
 
     private var createEntry: some View {
         ZStack(alignment: .bottomTrailing) {
+            RoundedRectangle(cornerRadius: isCreateMenuPresented ? 34 : 37, style: .continuous)
+                .fill(isCreateMenuPresented ? .white : Theme.Colors.accent)
+                .overlay(
+                    RoundedRectangle(cornerRadius: isCreateMenuPresented ? 34 : 37, style: .continuous)
+                        .stroke(isCreateMenuPresented ? Theme.Colors.line : .white, lineWidth: isCreateMenuPresented ? 1 : 5)
+                )
+                .shadow(
+                    color: (isCreateMenuPresented ? Theme.Colors.shadow : Theme.Colors.accent).opacity(isCreateMenuPresented ? 0.18 : 0.35),
+                    radius: isCreateMenuPresented ? 22 : 14,
+                    y: isCreateMenuPresented ? 10 : 8
+                )
+
+            Image(systemName: "plus")
+                .font(.system(size: isCreateMenuPresented ? 30 : 34, weight: .light))
+                .foregroundStyle(.white)
+                .frame(width: isCreateMenuPresented ? 62 : 74, height: isCreateMenuPresented ? 62 : 74)
+                .background(Theme.Colors.accent)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(.white, lineWidth: isCreateMenuPresented ? 4 : 0))
+                .opacity(isCreateMenuPresented ? 0 : 1)
+
             if isCreateMenuPresented {
-                CreateMenuView { category in
+                CreateMenuContentView { category in
                     withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.22)) {
                         isCreateMenuPresented = false
                     }
                     editorRoute = EditorRoute(category: category, memo: nil)
                 }
-                .transition(.scale(scale: 0.22, anchor: .bottomTrailing).combined(with: .opacity))
-            } else {
+                .padding(12)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
+            if !isCreateMenuPresented {
                 Button {
                     withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
                         isSearchPresented = false
+                        searchIconName = "SearchIcon"
+                        searchIconScale = 1
                         isCreateMenuPresented = true
                     }
                 } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 34, weight: .light))
-                        .foregroundStyle(.white)
+                    Color.clear
                         .frame(width: 74, height: 74)
-                        .background(Theme.Colors.accent)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(.white, lineWidth: 5))
-                        .shadow(color: Theme.Colors.accent.opacity(0.35), radius: 14, y: 8)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .transition(.scale(scale: 0.92).combined(with: .opacity))
             }
         }
-        .zIndex(6)
+        .frame(width: isCreateMenuPresented ? 286 : 74, height: isCreateMenuPresented ? 404 : 74)
+        .offset(y: isCreateMenuPresented ? -16 : 0)
+        .scaleEffect(isCreateMenuPresented ? 1 : 1, anchor: .bottomTrailing)
+        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.42), value: isCreateMenuPresented)
     }
 
     private func closeOverlays() {
+        let shouldResetSearchIcon = isSearchPresented || searchIconName != "SearchIcon"
         withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28)) {
             isCreateMenuPresented = false
             isSearchPresented = false
+        }
+        if shouldResetSearchIcon {
+            animateSearchIcon(to: "SearchIcon")
+            searchText = ""
+        }
+    }
+
+    private func toggleSearch() {
+        if isSearchPresented {
+            closeSearch()
+        } else {
+            openSearch()
+        }
+    }
+
+    private func openSearch() {
+        withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30)) {
+            isCreateMenuPresented = false
+            isSearchPresented = true
+        }
+        animateSearchIcon(to: "CloseIcon")
+    }
+
+    private func closeSearch() {
+        withAnimation(.timingCurve(0.64, 0, 0.78, 0, duration: 0.30)) {
+            isSearchPresented = false
+            searchText = ""
+        }
+        animateSearchIcon(to: "SearchIcon")
+    }
+
+    private func animateSearchIcon(to name: String) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            searchIconScale = 0.01
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            searchIconName = name
+            searchIconScale = 0.01
+            withAnimation(.interpolatingSpring(stiffness: 170, damping: 12)) {
+                searchIconScale = 1
+            }
         }
     }
 }
@@ -417,11 +477,16 @@ struct GridPaperPattern: View {
     }
 }
 
-struct CreateMenuView: View {
+struct CreateMenuContentView: View {
     let onSelect: (MemoCategory) -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("新建便签")
+                .font(.system(size: 18, weight: .black))
+                .foregroundStyle(Theme.Colors.text)
+                .padding(.horizontal, 12)
+
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 6) {
                     ForEach(MemoCategory.allCases) { category in
@@ -455,25 +520,7 @@ struct CreateMenuView: View {
                 }
             }
             .frame(maxHeight: 330)
-
-            Image(systemName: "plus")
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(.white)
-                .frame(width: 62, height: 62)
-                .background(Theme.Colors.accent)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(.white, lineWidth: 4))
-                .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(12)
-        .frame(width: 286)
-        .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .stroke(Theme.Colors.line, lineWidth: 1)
-        )
-        .shadow(color: Theme.Colors.shadow.opacity(0.18), radius: 22, y: 10)
     }
 }
 

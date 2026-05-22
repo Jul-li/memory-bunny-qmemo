@@ -35,6 +35,8 @@ struct HomeView: View {
                     memoList
                 }
                 .padding(.top, 10)
+                .blur(radius: isSearchPresented ? 24 : 0)
+                .animation(.easeOut(duration: 0.24), value: isSearchPresented)
                 .zIndex(0)
 
                 if isSearchPresented || isCreateMenuPresented {
@@ -43,8 +45,8 @@ struct HomeView: View {
                     } label: {
                         Rectangle()
                             .fill(.ultraThinMaterial)
-                            .opacity(0.48)
-                            .overlay(Theme.Colors.cream.opacity(0.14))
+                            .opacity(0.58)
+                            .overlay(Theme.Colors.cream.opacity(0.22))
                             .ignoresSafeArea()
                     }
                     .buttonStyle(.plain)
@@ -55,9 +57,14 @@ struct HomeView: View {
                 if isSearchPresented {
                     VStack(spacing: 0) {
                         header
+                            .padding(.top, 10)
+                        HStack {
+                            Spacer()
+                            searchBox
+                        }
+                        .padding(.horizontal, 20)
                         Spacer()
                     }
-                    .padding(.top, 10)
                     .transition(.opacity)
                     .zIndex(5)
                 }
@@ -110,12 +117,6 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
             }
-
-            if isSearchPresented {
-                searchBox
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .transition(.opacity)
-            }
         }
         .padding(.horizontal, 20)
         .zIndex(5)
@@ -145,16 +146,15 @@ struct HomeView: View {
         .opacity(searchBoxExpanded ? 1 : 0)
         .frame(width: searchBoxExpanded ? UIScreen.main.bounds.width - 40 : 54, height: searchBoxDropped ? 60 : 54)
         .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous))
+        .mask(RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous)
                 .stroke(Theme.Colors.line, lineWidth: 1)
         )
-        .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 16, y: 7)
+        .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 18, y: 8)
         .offset(y: searchBoxDropped ? 0 : -44)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30), value: searchBoxDropped)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34), value: searchBoxExpanded)
-        .clipped()
     }
 
     private var categoryScroller: some View {

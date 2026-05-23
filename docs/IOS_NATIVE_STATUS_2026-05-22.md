@@ -26,6 +26,14 @@
 - Added the rule that icon/text/image replacement must not change an existing styled control's outer style unless explicitly requested.
 - Stored the Xcode signing team in the native project settings for the current local build configuration.
 
+## 2026-05-23 Update
+
+- Refined the home floating create entry breakout style and press/open/close animation loop.
+- Tuned create menu timing so the icon shrink and container expansion feel connected.
+- Fixed memo card text layout so one-line and two-line subtitles keep more consistent vertical spacing.
+- Added the first pass of the home memo-list scroll effect: the top card scales gently after crossing the top threshold, preserves visual spacing, and avoids lingering top-edge artifacts.
+- Kept changes local to the native SwiftUI home screen and working UI rules.
+
 ## Current Known State
 
 - `xcodebuild` succeeds with:
@@ -38,6 +46,10 @@
 
 - Continue visual parity checks against the React Native reference for any remaining homepage details.
 - Manually verify search result tapping in the simulator after future search changes.
+- Optimize the edit page experience and polish editor details.
+- Build out the category page.
+- Build out the settings page.
+- Plan the App Store in-app purchase flow and product structure.
 - Decide final App Store bundle ID, display name, signing/capabilities, app icon set, screenshots, and privacy notes before submission.
 - Add real persistence and production delete confirmation in a later pass if not already covered by the native implementation.
 

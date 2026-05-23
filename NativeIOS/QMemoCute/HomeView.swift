@@ -13,6 +13,8 @@ struct HomeView: View {
     @State private var editorRoute: EditorRoute?
     @State private var isCreateMenuPresented = false
     @State private var isCreateMenuContentVisible = false
+    @State private var isCreateEntryPressed = false
+    @State private var isCreateIconTucked = false
 
     private var filteredMemos: [Memo] {
         store.memos.filter { memo in
@@ -268,27 +270,34 @@ struct HomeView: View {
                     MemoCardView(memo: memo) {
                         editorRoute = EditorRoute(category: memo.category, memo: memo)
                     }
+                    .memoTopScrollScaleEffect(in: "memoListScroll")
                 }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 168)
         }
+        .clipped()
+        .coordinateSpace(name: "memoListScroll")
     }
 
     private var createEntry: some View {
-        ZStack(alignment: .bottomTrailing) {
+        let collapsedButtonWidth: CGFloat = 64
+        let collapsedButtonHeight: CGFloat = 52
+        let collapsedTouchSize: CGFloat = 74
+
+        return ZStack(alignment: .bottomTrailing) {
             ZStack {
-                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : 37, style: .continuous)
+                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : collapsedButtonHeight / 2, style: .continuous)
                     .fill(Theme.Colors.accent)
                     .opacity(isCreateMenuPresented ? 0 : 1)
 
-                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : 37, style: .continuous)
+                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : collapsedButtonHeight / 2, style: .continuous)
                     .fill(.regularMaterial)
                     .opacity(isCreateMenuPresented ? 1 : 0)
             }
             .overlay(
-                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : 37, style: .continuous)
-                    .stroke(isCreateMenuPresented ? .white.opacity(0.62) : .white, lineWidth: isCreateMenuPresented ? 1 : 5)
+                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : collapsedButtonHeight / 2, style: .continuous)
+                    .stroke(isCreateMenuPresented ? .white.opacity(0.62) : .white, lineWidth: isCreateMenuPresented ? 1 : 2)
             )
             .shadow(
                 color: (isCreateMenuPresented ? Color.black : Theme.Colors.accent).opacity(isCreateMenuPresented ? 0.16 : 0.35),
@@ -296,19 +305,25 @@ struct HomeView: View {
                 y: isCreateMenuPresented ? 14 : 8
             )
             .overlay(
-                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : 37, style: .continuous)
+                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : collapsedButtonHeight / 2, style: .continuous)
                     .stroke(Theme.Colors.line.opacity(isCreateMenuPresented ? 0.28 : 0), lineWidth: 1)
                     .padding(0.5)
             )
-
-            if !isCreateMenuPresented {
-                Image("CreateEntryIcon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 64, height: 64)
-                    .offset(x: -5, y: -14)
-                    .transition(.scale(scale: 0.86).combined(with: .opacity))
-                    .allowsHitTesting(false)
+            .frame(
+                width: isCreateMenuPresented ? 286 : collapsedButtonWidth,
+                height: isCreateMenuPresented ? 404 : collapsedButtonHeight
+            )
+            .overlay(alignment: .top) {
+                if !isCreateMenuPresented {
+                    Image("CreateEntryIcon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 62, height: 62)
+                        .scaleEffect(isCreateIconTucked ? 0.01 : 1)
+                        .offset(x: 2, y: isCreateIconTucked ? -5 : -24)
+                        .animation(.timingCurve(0.24, 0.68, 0.28, 1, duration: 0.13), value: isCreateIconTucked)
+                        .allowsHitTesting(false)
+                }
             }
 
             if isCreateMenuPresented {
@@ -331,16 +346,21 @@ struct HomeView: View {
                     openCreateMenu()
                 } label: {
                     Color.clear
-                        .frame(width: 74, height: 74)
+                        .frame(width: collapsedTouchSize, height: collapsedTouchSize)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
             }
         }
-        .frame(width: isCreateMenuPresented ? 286 : 74, height: isCreateMenuPresented ? 404 : 74)
+        .frame(
+            width: isCreateMenuPresented ? 286 : collapsedTouchSize,
+            height: isCreateMenuPresented ? 404 : collapsedTouchSize,
+            alignment: .bottomTrailing
+        )
         .offset(y: isCreateMenuPresented ? -16 : 0)
-        .scaleEffect(isCreateMenuPresented ? 1 : 1, anchor: .bottomTrailing)
+        .scaleEffect(isCreateEntryPressed ? 0.97 : 1, anchor: .bottomTrailing)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.42), value: isCreateMenuPresented)
+        .animation(.easeOut(duration: 0.12), value: isCreateEntryPressed)
     }
 
     private func closeOverlays() {
@@ -370,6 +390,8 @@ struct HomeView: View {
         searchBoxChromeVisible = true
         isCreateMenuContentVisible = false
         isCreateMenuPresented = false
+        isCreateEntryPressed = false
+        isCreateIconTucked = false
         withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30)) {
             isSearchPresented = true
         }
@@ -387,14 +409,24 @@ struct HomeView: View {
     }
 
     private func openCreateMenu() {
-        withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
-            isSearchPresented = false
-            searchIconName = "SearchIcon"
-            searchIconScale = 1
-            isCreateMenuContentVisible = false
-            isCreateMenuPresented = true
+        isSearchPresented = false
+        searchIconName = "SearchIcon"
+        searchIconScale = 1
+        isCreateMenuContentVisible = false
+
+        withAnimation(.easeOut(duration: 0.13)) {
+            isCreateEntryPressed = true
+            isCreateIconTucked = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
+                isCreateEntryPressed = false
+                isCreateMenuPresented = true
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.39) {
             if isCreateMenuPresented {
                 withAnimation(.easeOut(duration: 0.18)) {
                     isCreateMenuContentVisible = true
@@ -409,7 +441,16 @@ struct HomeView: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28)) {
+                isCreateEntryPressed = true
                 isCreateMenuPresented = false
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                if !isCreateMenuPresented {
+                    withAnimation(.interpolatingSpring(stiffness: 190, damping: 16)) {
+                        isCreateIconTucked = false
+                        isCreateEntryPressed = false
+                    }
+                }
             }
         }
     }
@@ -503,10 +544,31 @@ struct CategoryPillPressStyle: ButtonStyle {
     }
 }
 
+private extension View {
+    func memoTopScrollScaleEffect(in coordinateSpace: String) -> some View {
+        visualEffect { content, proxy in
+            let frame = proxy.frame(in: .named(coordinateSpace))
+            let minY = frame.minY
+            let activationOffset: CGFloat = 20
+            let shrinkDistance: CGFloat = 118
+            let progress = min(max((-minY - activationOffset) / shrinkDistance, 0), 1)
+            let easedProgress = progress * progress * (3 - 2 * progress)
+            let scale = 1 - easedProgress * 0.06
+            let exitProgress = min(max((frame.maxY - 2) / 10, 0), 1)
+
+            return content
+                .scaleEffect(scale, anchor: .bottom)
+                .opacity(exitProgress)
+        }
+    }
+}
+
 struct MemoCardView: View {
     @EnvironmentObject private var store: MemoStore
     let memo: Memo
     let action: () -> Void
+    private let cardMinHeight: CGFloat = 190
+    private let cardPadding: CGFloat = 22
 
     private var dateText: String {
         memo.updatedAt.formatted(.dateTime.month().day().hour().minute())
@@ -561,15 +623,21 @@ struct MemoCardView: View {
                             .frame(maxWidth: 230, alignment: .leading)
                             .padding(.top, 4)
 
+                        Spacer(minLength: 0)
+
                         Text(dateText)
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(Theme.Colors.muted)
                             .padding(.top, 6)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(22)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: cardMinHeight - cardPadding * 2,
+                        alignment: .topLeading
+                    )
+                    .padding(cardPadding)
                 }
-                .frame(minHeight: 190)
+                .frame(minHeight: cardMinHeight)
             }
             .buttonStyle(.plain)
 
@@ -726,7 +794,7 @@ struct CreateMenuContentView: View {
                                 Image(category.iconAsset)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 44, height: 44)
+                                    .frame(width: 32, height: 32)
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(category.title)

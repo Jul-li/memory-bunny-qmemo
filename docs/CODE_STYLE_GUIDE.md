@@ -137,6 +137,7 @@ Spacing:
 
 - Do not modify visual styling unless the user explicitly asks for style changes.
 - When the user asks to replace an icon, image, text, or asset inside an existing styled control, preserve the existing control's size, shape, fill, stroke, shadow, spacing, and interaction unless the user explicitly asks to change those outer styles.
+- When the user asks for a breakout effect, position the overflowing icon or artwork absolutely with an overlay/alignment layer so it does not participate in the parent control's layout size.
 - For bug fixes in styled components, only change the specific geometry or behavior needed to fix the bug.
 - If a user asks for a style adjustment that conflicts with this guide, update this guide by replacing the conflicting rule.
 - If a user asks for a style adjustment that is not covered here, add it as a new rule.

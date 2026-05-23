@@ -277,27 +277,39 @@ struct HomeView: View {
 
     private var createEntry: some View {
         ZStack(alignment: .bottomTrailing) {
-            RoundedRectangle(cornerRadius: isCreateMenuPresented ? 34 : 37, style: .continuous)
-                .fill(isCreateMenuPresented ? .white : Theme.Colors.accent)
-                .overlay(
-                    RoundedRectangle(cornerRadius: isCreateMenuPresented ? 34 : 37, style: .continuous)
-                        .stroke(isCreateMenuPresented ? Theme.Colors.line : .white, lineWidth: isCreateMenuPresented ? 1 : 5)
-                )
-                .shadow(
-                    color: (isCreateMenuPresented ? Theme.Colors.shadow : Theme.Colors.accent).opacity(isCreateMenuPresented ? 0.18 : 0.35),
-                    radius: isCreateMenuPresented ? 22 : 14,
-                    y: isCreateMenuPresented ? 10 : 8
-                )
+            ZStack {
+                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : 37, style: .continuous)
+                    .fill(Theme.Colors.accent)
+                    .opacity(isCreateMenuPresented ? 0 : 1)
 
-            Image("CreateEntryIcon")
-                .resizable()
-                .scaledToFit()
-                .frame(width: isCreateMenuPresented ? 38 : 44, height: isCreateMenuPresented ? 38 : 44)
-                .frame(width: isCreateMenuPresented ? 62 : 74, height: isCreateMenuPresented ? 62 : 74)
-                .background(Theme.Colors.accent)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(.white, lineWidth: isCreateMenuPresented ? 4 : 0))
-                .opacity(isCreateMenuPresented ? 0 : 1)
+                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : 37, style: .continuous)
+                    .fill(.regularMaterial)
+                    .opacity(isCreateMenuPresented ? 1 : 0)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : 37, style: .continuous)
+                    .stroke(isCreateMenuPresented ? .white.opacity(0.62) : .white, lineWidth: isCreateMenuPresented ? 1 : 5)
+            )
+            .shadow(
+                color: (isCreateMenuPresented ? Color.black : Theme.Colors.accent).opacity(isCreateMenuPresented ? 0.16 : 0.35),
+                radius: isCreateMenuPresented ? 28 : 14,
+                y: isCreateMenuPresented ? 14 : 8
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : 37, style: .continuous)
+                    .stroke(Theme.Colors.line.opacity(isCreateMenuPresented ? 0.28 : 0), lineWidth: 1)
+                    .padding(0.5)
+            )
+
+            if !isCreateMenuPresented {
+                Image("CreateEntryIcon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 64, height: 64)
+                    .offset(x: -5, y: -14)
+                    .transition(.scale(scale: 0.86).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
 
             if isCreateMenuPresented {
                 CreateMenuContentView { category in
@@ -308,7 +320,7 @@ struct HomeView: View {
                 }
                 .padding(12)
                 .frame(width: 286, height: 404, alignment: .topLeading)
-                .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
                 .opacity(isCreateMenuContentVisible ? 1 : 0)
                 .offset(y: isCreateMenuContentVisible ? 0 : 10)
                 .animation(.easeOut(duration: 0.18), value: isCreateMenuContentVisible)

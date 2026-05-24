@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var store: MemoStore
+    @Binding var isTabBarHidden: Bool
     @State private var searchText = ""
     @State private var isSearchPresented = false
     @State private var searchIconName = "SearchIcon"
@@ -10,11 +11,12 @@ struct HomeView: View {
     @State private var searchBoxExpanded = false
     @State private var searchBoxChromeVisible = false
     @State private var selectedCategory: MemoCategory?
-    @State private var editorRoute: EditorRoute?
+    @State private var editorPath: [EditorRoute] = []
     @State private var isCreateMenuPresented = false
     @State private var isCreateMenuContentVisible = false
     @State private var isCreateEntryPressed = false
     @State private var isCreateIconTucked = false
+    @Namespace private var editorTransitionNamespace
 
     private var filteredMemos: [Memo] {
         store.memos.filter { memo in
@@ -27,7 +29,7 @@ struct HomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $editorPath) {
             ZStack {
                 Theme.Colors.background
                     .ignoresSafeArea()
@@ -99,9 +101,15 @@ struct HomeView: View {
                 .animation(.easeOut(duration: 0.24), value: isSearchPresented)
                 .zIndex(isCreateMenuPresented ? 6 : 1)
             }
-            .sheet(item: $editorRoute) { route in
-                MemoEditorView(category: route.category, memo: route.memo)
+            .navigationDestination(for: EditorRoute.self) { route in
+                editorDestination(for: route)
             }
+        }
+        .onChange(of: editorPath) { _, path in
+            isTabBarHidden = !path.isEmpty
+        }
+        .onDisappear {
+            isTabBarHidden = false
         }
     }
 
@@ -215,9 +223,22 @@ struct HomeView: View {
                 ScrollView {
                     LazyVStack(spacing: 18) {
                         ForEach(filteredMemos) { memo in
-                            MemoCardView(memo: memo) {
-                                editorRoute = EditorRoute(category: memo.category, memo: memo)
+                            MemoCardView(
+                                memo: memo,
+                                pinAction: {
+                                    togglePin(memo, animateReorder: false, scrollProxy: nil)
+                                },
+                                editAction: {
+                                    openEditor(category: memo.category, memo: memo, transition: .standard)
+                                }
+                            ) {
+                                openEditor(category: memo.category, memo: memo, transition: .card)
                             }
+                            .memoEditorTransitionSource(
+                                for: memo.id,
+                                in: editorTransitionNamespace,
+                                enabled: true
+                            )
                         }
                     }
                     .padding(.horizontal, 20)
@@ -264,20 +285,98 @@ struct HomeView: View {
     }
 
     private var memoList: some View {
-        ScrollView {
-            LazyVStack(spacing: 18) {
-                ForEach(filteredMemos) { memo in
-                    MemoCardView(memo: memo) {
-                        editorRoute = EditorRoute(category: memo.category, memo: memo)
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(MemoListAnchor.top)
+
+                    LazyVStack(spacing: 18) {
+                        ForEach(filteredMemos) { memo in
+                            let shouldAnimateReorder = filteredMemos.first?.id != memo.id
+
+                        MemoCardView(
+                            memo: memo,
+                            pinAction: {
+                                togglePin(
+                                    memo,
+                                    animateReorder: shouldAnimateReorder,
+                                    scrollProxy: scrollProxy
+                                )
+                            },
+                            editAction: {
+                                openEditor(category: memo.category, memo: memo, transition: .standard)
+                            }
+                        ) {
+                            openEditor(category: memo.category, memo: memo, transition: .card)
+                        }
+                        .memoEditorTransitionSource(
+                            for: memo.id,
+                            in: editorTransitionNamespace,
+                            enabled: !isSearchPresented
+                        )
+                        .memoTopScrollScaleEffect(in: "memoListScroll")
                     }
-                    .memoTopScrollScaleEffect(in: "memoListScroll")
+                }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 168)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 168)
+            .clipped()
+            .coordinateSpace(name: "memoListScroll")
         }
-        .clipped()
-        .coordinateSpace(name: "memoListScroll")
+    }
+
+    private func togglePin(_ memo: Memo, animateReorder: Bool, scrollProxy: ScrollViewProxy?) {
+        let isPinning = !memo.isPinned
+        let shouldScrollToTop = isPinning && animateReorder
+        let animation = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.46)
+
+        if isPinning && animateReorder {
+            withAnimation(animation) {
+                store.togglePin(memo)
+            }
+        } else {
+            store.togglePin(memo)
+        }
+
+        guard shouldScrollToTop, let scrollProxy else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(animation) {
+                scrollProxy.scrollTo(MemoListAnchor.top, anchor: .top)
+            }
+        }
+    }
+
+    private func openEditor(category: MemoCategory, memo: Memo?, transition: EditorTransition) {
+        editorPath = [
+            EditorRoute(category: category, memo: memo, transition: transition)
+        ]
+    }
+
+    @ViewBuilder
+    private func editorDestination(for route: EditorRoute) -> some View {
+        let memo = route.memoID.flatMap { memoID in
+            store.memos.first { $0.id == memoID }
+        }
+        let editor = MemoEditorView(
+            category: route.category,
+            memo: memo,
+            navigationChrome: route.transition == .card ? .cardExpanded : .native
+        )
+
+        if route.transition == .card, let memoID = route.memoID {
+            if #available(iOS 18.0, *) {
+                editor
+                    .navigationTransition(.zoom(sourceID: memoID, in: editorTransitionNamespace))
+            } else {
+                editor
+            }
+        } else {
+            editor
+        }
     }
 
     private var createEntry: some View {
@@ -330,7 +429,7 @@ struct HomeView: View {
                 CreateMenuContentView { category in
                     closeCreateMenu()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
-                        editorRoute = EditorRoute(category: category, memo: nil)
+                        openEditor(category: category, memo: nil, transition: .standard)
                     }
                 }
                 .padding(12)
@@ -491,10 +590,23 @@ struct HomeView: View {
     }
 }
 
-struct EditorRoute: Identifiable {
-    let id = UUID()
+enum EditorTransition: Hashable {
+    case card
+    case standard
+}
+
+struct EditorRoute: Hashable, Identifiable {
+    let id: UUID
     let category: MemoCategory
-    let memo: Memo?
+    let memoID: UUID?
+    let transition: EditorTransition
+
+    init(category: MemoCategory, memo: Memo?, transition: EditorTransition) {
+        self.id = memo?.id ?? UUID()
+        self.category = category
+        self.memoID = memo?.id
+        self.transition = transition
+    }
 }
 
 struct CategoryPill: View {
@@ -545,6 +657,23 @@ struct CategoryPillPressStyle: ButtonStyle {
 }
 
 private extension View {
+    @ViewBuilder
+    func memoEditorTransitionSource(
+        for id: UUID,
+        in namespace: Namespace.ID,
+        enabled: Bool
+    ) -> some View {
+        if enabled {
+            if #available(iOS 18.0, *) {
+                self.matchedTransitionSource(id: id, in: namespace)
+            } else {
+                self
+            }
+        } else {
+            self
+        }
+    }
+
     func memoTopScrollScaleEffect(in coordinateSpace: String) -> some View {
         visualEffect { content, proxy in
             let frame = proxy.frame(in: .named(coordinateSpace))
@@ -563,9 +692,15 @@ private extension View {
     }
 }
 
+private enum MemoListAnchor {
+    static let top = "memoListTop"
+}
+
 struct MemoCardView: View {
     @EnvironmentObject private var store: MemoStore
     let memo: Memo
+    let pinAction: () -> Void
+    let editAction: () -> Void
     let action: () -> Void
     private let cardMinHeight: CGFloat = 190
     private let cardPadding: CGFloat = 22
@@ -591,7 +726,7 @@ struct MemoCardView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: 86, height: 86)
-                        .padding(.trailing, 26)
+                        .padding(.trailing, 18)
                         .padding(.top, 38)
 
                     VStack(alignment: .leading, spacing: 0) {
@@ -643,7 +778,7 @@ struct MemoCardView: View {
 
             Menu {
                 Button {
-                    store.togglePin(memo)
+                    togglePin()
                 } label: {
                     MemoActionMenuLabel(
                         title: memo.isPinned ? "取消置顶" : "置顶",
@@ -651,7 +786,7 @@ struct MemoCardView: View {
                     )
                 }
                 Button {
-                    action()
+                    editAction()
                 } label: {
                     MemoActionMenuLabel(title: "编辑", icon: "ActionEdit")
                 }
@@ -673,7 +808,7 @@ struct MemoCardView: View {
         }
         .contextMenu {
             Button {
-                store.togglePin(memo)
+                togglePin()
             } label: {
                 MemoActionMenuLabel(
                     title: memo.isPinned ? "取消置顶" : "置顶",
@@ -681,7 +816,7 @@ struct MemoCardView: View {
                 )
             }
             Button {
-                action()
+                editAction()
             } label: {
                 MemoActionMenuLabel(title: "编辑", icon: "ActionEdit")
             }
@@ -691,6 +826,10 @@ struct MemoCardView: View {
                 MemoActionMenuLabel(title: "删除", icon: "ActionDelete")
             }
         }
+    }
+
+    private func togglePin() {
+        pinAction()
     }
 }
 

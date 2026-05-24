@@ -26,13 +26,14 @@ enum AppTab: String, CaseIterable, Identifiable {
 
 struct ContentView: View {
     @State private var selectedTab: AppTab = .home
+    @State private var isTabBarHidden = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Group {
                 switch selectedTab {
                 case .home:
-                    HomeView()
+                    HomeView(isTabBarHidden: $isTabBarHidden)
                 case .categories:
                     CategorySummaryView()
                 case .settings:
@@ -41,11 +42,20 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            CuteNativeTabBar(selectedTab: $selectedTab)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 18)
+            if !isTabBarHidden {
+                CuteNativeTabBar(selectedTab: $selectedTab)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 18)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28), value: isTabBarHidden)
+        .onChange(of: selectedTab) { _, tab in
+            if tab != .home {
+                isTabBarHidden = false
+            }
+        }
     }
 }
 

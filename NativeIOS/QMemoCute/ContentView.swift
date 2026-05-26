@@ -27,13 +27,20 @@ enum AppTab: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @State private var selectedTab: AppTab = .home
     @State private var isTabBarHidden = false
+    @State private var isHomeOverlayPresented = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
+            Theme.Colors.background
+                .ignoresSafeArea()
+
             Group {
                 switch selectedTab {
                 case .home:
-                    HomeView(isTabBarHidden: $isTabBarHidden)
+                    HomeView(
+                        isTabBarHidden: $isTabBarHidden,
+                        isHomeOverlayPresented: $isHomeOverlayPresented
+                    )
                 case .categories:
                     CategorySummaryView()
                 case .settings:
@@ -43,18 +50,259 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if !isTabBarHidden {
-                CuteNativeTabBar(selectedTab: $selectedTab)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 18)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                ZStack(alignment: .bottom) {
+                    bottomTabBarChrome
+
+                    CuteNativeTabBar(selectedTab: $selectedTab)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
+                }
+                .blur(radius: isHomeOverlayPresented ? 16 : 0)
+                .opacity(isHomeOverlayPresented ? 0.24 : 1)
+                .allowsHitTesting(!isHomeOverlayPresented)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeOut(duration: 0.24), value: isHomeOverlayPresented)
+                .zIndex(2)
             }
         }
+        .background(Theme.Colors.background.ignoresSafeArea())
+        .windowBackground(UIColor(Theme.Colors.background))
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28), value: isTabBarHidden)
         .onChange(of: selectedTab) { _, tab in
             if tab != .home {
                 isTabBarHidden = false
+                isHomeOverlayPresented = false
             }
+        }
+    }
+
+    private var bottomTabBarChrome: some View {
+        VStack {
+            Spacer()
+            qMemoChromeMaterial(
+                tintOpacity: 0.16,
+                mask: LinearGradient(
+                    colors: [.clear, .clear, .black.opacity(0.62), .black],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .allowsHitTesting(false)
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Theme.Colors.background.opacity(0),
+                        Theme.Colors.background.opacity(0),
+                        Theme.Colors.background.opacity(0.62),
+                        Theme.Colors.background.opacity(0.78),
+                        Theme.Colors.background.opacity(1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(height: 142)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct WindowBackgroundSetter: UIViewRepresentable {
+    let color: UIColor
+
+    func makeUIView(context: Context) -> BackgroundResolverView {
+        let view = BackgroundResolverView()
+        view.color = color
+        DispatchQueue.main.async {
+            applyBackground(from: view)
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: BackgroundResolverView, context: Context) {
+        DispatchQueue.main.async {
+            applyBackground(from: uiView)
+        }
+    }
+
+    private func applyBackground(from view: BackgroundResolverView) {
+        view.color = color
+        view.applyBackground()
+    }
+
+    final class BackgroundResolverView: UIView {
+        var color: UIColor = .clear
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            applyBackground()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            applyBackground()
+        }
+
+        func applyBackground() {
+            window?.backgroundColor = color
+            colorNavigationContainers(from: self)
+        }
+
+        private func colorNavigationContainers(from view: UIView) {
+            var responder: UIResponder? = view
+            while let current = responder {
+                if let controller = current as? UIViewController {
+                    controller.view.backgroundColor = color
+                    controller.navigationController?.view.backgroundColor = color
+                    controller.navigationController?.view.subviews.forEach { container in
+                        if shouldColorContainer(container) {
+                            container.backgroundColor = color
+                        }
+                    }
+                }
+                responder = current.next
+            }
+        }
+
+        private func shouldColorContainer(_ view: UIView) -> Bool {
+            let className = String(describing: type(of: view))
+            return className.contains("Transition")
+                || className.contains("UILayoutContainer")
+                || className.contains("ControllerWrapper")
+                || className.contains("DropShadow")
+                || className.contains("Presentation")
+                || className.contains("Dimming")
+                || className.contains("Backdrop")
+                || className.contains("Snapshot")
+        }
+    }
+}
+
+extension View {
+    func windowBackground(_ color: UIColor) -> some View {
+        background(WindowBackgroundSetter(color: color).frame(width: 0, height: 0))
+    }
+
+    func disablesNavigationDragDismiss() -> some View {
+        background(NavigationDragDismissDisabler().frame(width: 0, height: 0))
+    }
+}
+
+private struct NavigationDragDismissDisabler: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller {
+        Controller()
+    }
+
+    func updateUIViewController(_ uiViewController: Controller, context: Context) {
+        DispatchQueue.main.async {
+            uiViewController.disableNavigationGestures()
+        }
+    }
+
+    final class Controller: UIViewController {
+        private var originalStates: [ObjectIdentifier: (gesture: UIGestureRecognizer, isEnabled: Bool)] = [:]
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            disableNavigationGestures()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self.disableNavigationGestures()
+            }
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            disableNavigationGestures()
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            disableNavigationGestures()
+        }
+
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            disableNavigationGestures()
+        }
+
+        deinit {
+            restoreGestures()
+        }
+
+        func disableNavigationGestures() {
+            guard let navigationController = navigationController ?? parent?.navigationController ?? nearestNavigationController() else { return }
+
+            if let popGesture = navigationController.interactivePopGestureRecognizer {
+                disable(popGesture)
+            }
+
+            disableDismissGestures(in: navigationController.view)
+        }
+
+        private func nearestNavigationController() -> UINavigationController? {
+            var responder: UIResponder? = self
+            while let current = responder {
+                if let navigationController = current as? UINavigationController {
+                    return navigationController
+                }
+                if let controller = current as? UIViewController, let navigationController = controller.navigationController {
+                    return navigationController
+                }
+                responder = current.next
+            }
+            return view.window?.rootViewController.flatMap { findNavigationController(in: $0) }
+        }
+
+        private func findNavigationController(in controller: UIViewController) -> UINavigationController? {
+            if let navigationController = controller as? UINavigationController {
+                return navigationController
+            }
+
+            for child in controller.children {
+                if let navigationController = findNavigationController(in: child) {
+                    return navigationController
+                }
+            }
+
+            return controller.presentedViewController.flatMap { findNavigationController(in: $0) }
+        }
+
+        private func disableDismissGestures(in view: UIView) {
+            if view is UIControl || view is UIScrollView {
+                return
+            }
+
+            view.gestureRecognizers?.forEach { gesture in
+                if shouldDisable(gesture) {
+                    disable(gesture)
+                }
+            }
+
+            view.subviews.forEach { disableDismissGestures(in: $0) }
+        }
+
+        private func shouldDisable(_ gesture: UIGestureRecognizer) -> Bool {
+            gesture is UIPanGestureRecognizer
+                || gesture is UIScreenEdgePanGestureRecognizer
+                || gesture is UILongPressGestureRecognizer
+        }
+
+        private func disable(_ gesture: UIGestureRecognizer) {
+            let key = ObjectIdentifier(gesture)
+            if originalStates[key] == nil {
+                originalStates[key] = (gesture, gesture.isEnabled)
+            }
+            gesture.isEnabled = false
+        }
+
+        private func restoreGestures() {
+            originalStates.values.forEach { entry in
+                entry.gesture.isEnabled = entry.isEnabled
+            }
+            originalStates.removeAll()
         }
     }
 }

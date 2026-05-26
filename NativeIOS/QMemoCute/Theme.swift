@@ -20,6 +20,78 @@ enum Theme {
     }
 }
 
+struct QMemoGlassBackground<S: InsettableShape>: View {
+    let shape: S
+    var tintOpacity: Double = 0.24
+    var fallbackFillOpacity: Double = 0.74
+    var strokeOpacity: Double = 0.62
+    var lineOpacity: Double = 0.18
+
+    var body: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                shape
+                    .fill(Theme.Colors.surfaceStrong.opacity(0.14))
+                    .glassEffect(
+                        .regular
+                            .tint(Theme.Colors.background.opacity(tintOpacity))
+                            .interactive(false),
+                        in: shape
+                    )
+            } else {
+                shape
+                    .fill(.regularMaterial)
+                    .overlay(shape.fill(Theme.Colors.surfaceStrong.opacity(fallbackFillOpacity)))
+            }
+        }
+        .overlay(shape.stroke(.white.opacity(strokeOpacity), lineWidth: 1))
+        .overlay(shape.stroke(Theme.Colors.line.opacity(lineOpacity), lineWidth: 1))
+    }
+}
+
+struct QMemoGlassScrim: View {
+    var tintOpacity: Double = 0.22
+
+    var body: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .glassEffect(
+                        .regular
+                            .tint(Theme.Colors.background.opacity(tintOpacity))
+                            .interactive(false),
+                        in: Rectangle()
+                    )
+            } else {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+            }
+        }
+        .overlay(Theme.Colors.cream.opacity(0.18))
+    }
+}
+
+@ViewBuilder
+func qMemoChromeMaterial<Mask: View>(tintOpacity: Double = 0.18, mask: Mask) -> some View {
+    Group {
+        if #available(iOS 26.0, *) {
+            Rectangle()
+                .fill(.regularMaterial)
+                .glassEffect(
+                    .regular
+                        .tint(Theme.Colors.background.opacity(tintOpacity))
+                        .interactive(false),
+                    in: Rectangle()
+                )
+        } else {
+            Rectangle()
+                .fill(.regularMaterial)
+        }
+    }
+    .mask(mask)
+}
+
 extension Color {
     init(hex: String) {
         let scanner = Scanner(string: hex)

@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject private var store: MemoStore
     @Binding var isTabBarHidden: Bool
+    @Binding var isHomeOverlayPresented: Bool
     @State private var searchText = ""
     @State private var isSearchPresented = false
     @State private var searchIconName = "SearchIcon"
@@ -10,6 +11,8 @@ struct HomeView: View {
     @State private var searchBoxDropped = false
     @State private var searchBoxExpanded = false
     @State private var searchBoxChromeVisible = false
+    @State private var searchDismissScale = 1.0
+    @State private var searchDismissOpacity = 1.0
     @State private var selectedCategory: MemoCategory?
     @State private var editorPath: [EditorRoute] = []
     @State private var isCreateMenuPresented = false
@@ -57,10 +60,8 @@ struct HomeView: View {
                     Button {
                         closeOverlays()
                     } label: {
-                        Rectangle()
-                            .fill(.ultraThinMaterial)
-                            .opacity(0.58)
-                            .overlay(Theme.Colors.cream.opacity(0.22))
+                        QMemoGlassScrim(tintOpacity: 0.20)
+                            .opacity(0.66)
                             .ignoresSafeArea()
                     }
                     .buttonStyle(.plain)
@@ -70,6 +71,8 @@ struct HomeView: View {
 
                 if isSearchPresented && !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     searchResultsLayer
+                        .scaleEffect(searchDismissScale, anchor: .top)
+                        .opacity(searchDismissOpacity)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                         .zIndex(5)
                 }
@@ -84,6 +87,8 @@ struct HomeView: View {
                         .padding(.top, 74)
                         Spacer()
                     }
+                    .scaleEffect(searchDismissScale, anchor: .topTrailing)
+                    .opacity(searchDismissOpacity)
                     .transition(.opacity)
                     .zIndex(7)
                 }
@@ -105,11 +110,17 @@ struct HomeView: View {
                 editorDestination(for: route)
             }
         }
+        .background(Theme.Colors.background.ignoresSafeArea())
+        .windowBackground(UIColor(Theme.Colors.background))
         .onChange(of: editorPath) { _, path in
             isTabBarHidden = !path.isEmpty
         }
         .onDisappear {
             isTabBarHidden = false
+            isHomeOverlayPresented = false
+        }
+        .onChange(of: isSearchPresented || isCreateMenuPresented) { _, isPresented in
+            isHomeOverlayPresented = isPresented
         }
     }
 
@@ -176,12 +187,17 @@ struct HomeView: View {
         .padding(.horizontal, 18)
         .opacity(searchBoxExpanded ? 1 : 0)
         .frame(width: searchBoxExpanded ? UIScreen.main.bounds.width - 40 : 54, height: searchBoxDropped ? 60 : 54)
-        .background(.white.opacity(searchBoxChromeVisible ? 1 : 0))
-        .mask(RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous)
-                .stroke(Theme.Colors.line.opacity(searchBoxChromeVisible ? 1 : 0), lineWidth: 1)
+        .background(
+            QMemoGlassBackground(
+                shape: RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous),
+                tintOpacity: 0.18,
+                fallbackFillOpacity: 0.82,
+                strokeOpacity: 0.68,
+                lineOpacity: 0.10
+            )
+            .opacity(searchBoxChromeVisible ? 1 : 0)
         )
+        .clipShape(RoundedRectangle(cornerRadius: searchBoxExpanded ? 30 : 27, style: .continuous))
         .shadow(color: Theme.Colors.shadow.opacity(searchBoxChromeVisible ? 0.14 : 0), radius: 18, y: 8)
         .offset(y: searchBoxDropped ? 12 : -44)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.30), value: searchBoxDropped)
@@ -244,6 +260,7 @@ struct HomeView: View {
                     .padding(.horizontal, 20)
                     .padding(.bottom, 168)
                 }
+                .scrollIndicators(.hidden)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -323,6 +340,7 @@ struct HomeView: View {
                     .padding(.bottom, 168)
                 }
             }
+            .scrollIndicators(.hidden)
             .clipped()
             .coordinateSpace(name: "memoListScroll")
         }
@@ -356,6 +374,30 @@ struct HomeView: View {
         ]
     }
 
+    private func openEditorFromCreateMenu(_ category: MemoCategory) {
+        openEditor(
+            category: category,
+            memo: nil,
+            transition: .createMenu(createMenuTransitionID(for: category))
+        )
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.70) {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isCreateMenuContentVisible = false
+                isCreateMenuPresented = false
+                isCreateEntryPressed = false
+                isCreateIconTucked = false
+                isHomeOverlayPresented = false
+            }
+        }
+    }
+
+    private func createMenuTransitionID(for category: MemoCategory) -> String {
+        "create-menu-\(category.rawValue)"
+    }
+
     @ViewBuilder
     private func editorDestination(for route: EditorRoute) -> some View {
         let memo = route.memoID.flatMap { memoID in
@@ -364,18 +406,34 @@ struct HomeView: View {
         let editor = MemoEditorView(
             category: route.category,
             memo: memo,
-            navigationChrome: route.transition == .card ? .cardExpanded : .native
+            navigationChrome: route.transition.usesExpandedNavigationChrome ? .cardExpanded : .native
         )
 
         if route.transition == .card, let memoID = route.memoID {
             if #available(iOS 18.0, *) {
                 editor
+                    .background(Theme.Colors.background.ignoresSafeArea())
+                    .windowBackground(UIColor(Theme.Colors.background))
+                    .disablesNavigationDragDismiss()
                     .navigationTransition(.zoom(sourceID: memoID, in: editorTransitionNamespace))
             } else {
                 editor
+                    .disablesNavigationDragDismiss()
+            }
+        } else if case let .createMenu(sourceID) = route.transition {
+            if #available(iOS 18.0, *) {
+                editor
+                    .background(Theme.Colors.background.ignoresSafeArea())
+                    .windowBackground(UIColor(Theme.Colors.background))
+                    .disablesNavigationDragDismiss()
+                    .navigationTransition(.zoom(sourceID: sourceID, in: editorTransitionNamespace))
+            } else {
+                editor
+                    .disablesNavigationDragDismiss()
             }
         } else {
             editor
+                .disablesNavigationDragDismiss()
         }
     }
 
@@ -390,13 +448,18 @@ struct HomeView: View {
                     .fill(Theme.Colors.accent)
                     .opacity(isCreateMenuPresented ? 0 : 1)
 
-                RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : collapsedButtonHeight / 2, style: .continuous)
-                    .fill(.regularMaterial)
+                QMemoGlassBackground(
+                    shape: RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : collapsedButtonHeight / 2, style: .continuous),
+                    tintOpacity: 0.20,
+                    fallbackFillOpacity: 0.78,
+                    strokeOpacity: 0.66,
+                    lineOpacity: 0.12
+                )
                     .opacity(isCreateMenuPresented ? 1 : 0)
             }
             .overlay(
                 RoundedRectangle(cornerRadius: isCreateMenuPresented ? 30 : collapsedButtonHeight / 2, style: .continuous)
-                    .stroke(isCreateMenuPresented ? .white.opacity(0.62) : .white, lineWidth: isCreateMenuPresented ? 1 : 2)
+                    .stroke(isCreateMenuPresented ? .clear : .white, lineWidth: 2)
             )
             .shadow(
                 color: (isCreateMenuPresented ? Color.black : Theme.Colors.accent).opacity(isCreateMenuPresented ? 0.16 : 0.35),
@@ -426,11 +489,8 @@ struct HomeView: View {
             }
 
             if isCreateMenuPresented {
-                CreateMenuContentView { category in
-                    closeCreateMenu()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
-                        openEditor(category: category, memo: nil, transition: .standard)
-                    }
+                CreateMenuContentView(namespace: editorTransitionNamespace) { category in
+                    openEditorFromCreateMenu(category)
                 }
                 .padding(12)
                 .frame(width: 286, height: 404, alignment: .topLeading)
@@ -484,6 +544,9 @@ struct HomeView: View {
     }
 
     private func openSearch() {
+        isHomeOverlayPresented = true
+        searchDismissScale = 1
+        searchDismissOpacity = 1
         searchBoxDropped = false
         searchBoxExpanded = false
         searchBoxChromeVisible = true
@@ -508,6 +571,7 @@ struct HomeView: View {
     }
 
     private func openCreateMenu() {
+        isHomeOverlayPresented = true
         isSearchPresented = false
         searchIconName = "SearchIcon"
         searchIconScale = 1
@@ -518,14 +582,14 @@ struct HomeView: View {
             isCreateIconTucked = true
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
             withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
                 isCreateEntryPressed = false
                 isCreateMenuPresented = true
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.39) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
             if isCreateMenuPresented {
                 withAnimation(.easeOut(duration: 0.18)) {
                     isCreateMenuContentVisible = true
@@ -543,10 +607,12 @@ struct HomeView: View {
                 isCreateEntryPressed = true
                 isCreateMenuPresented = false
             }
+            withAnimation(.interpolatingSpring(stiffness: 190, damping: 16)) {
+                isCreateIconTucked = false
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
                 if !isCreateMenuPresented {
                     withAnimation(.interpolatingSpring(stiffness: 190, damping: 16)) {
-                        isCreateIconTucked = false
                         isCreateEntryPressed = false
                     }
                 }
@@ -555,6 +621,11 @@ struct HomeView: View {
     }
 
     private func closeSearch() {
+        if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            closeSearchImmediately()
+            return
+        }
+
         withAnimation(.timingCurve(0.64, 0, 0.78, 0, duration: 0.22)) {
             searchBoxExpanded = false
         }
@@ -572,8 +643,35 @@ struct HomeView: View {
                 searchText = ""
             }
             searchBoxChromeVisible = false
+            isHomeOverlayPresented = isCreateMenuPresented
         }
         animateSearchIcon(to: "SearchIcon")
+    }
+
+    private func closeSearchImmediately() {
+        let duration = 0.18
+
+        withAnimation(.timingCurve(0.16, 0.84, 0.28, 1, duration: duration)) {
+            searchDismissScale = 1.04
+            searchDismissOpacity = 0
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                searchBoxExpanded = false
+                searchBoxDropped = false
+                searchBoxChromeVisible = false
+                isSearchPresented = false
+                searchText = ""
+                searchDismissScale = 1
+                searchDismissOpacity = 1
+            }
+            searchIconName = "SearchIcon"
+            searchIconScale = 1
+            isHomeOverlayPresented = isCreateMenuPresented
+        }
     }
 
     private func animateSearchIcon(to name: String) {
@@ -592,7 +690,17 @@ struct HomeView: View {
 
 enum EditorTransition: Hashable {
     case card
+    case createMenu(String)
     case standard
+
+    var usesExpandedNavigationChrome: Bool {
+        switch self {
+        case .card, .createMenu:
+            true
+        case .standard:
+            false
+        }
+    }
 }
 
 struct EditorRoute: Hashable, Identifiable {
@@ -688,6 +796,15 @@ private extension View {
             return content
                 .scaleEffect(scale, anchor: .bottom)
                 .opacity(exitProgress)
+        }
+    }
+
+    @ViewBuilder
+    func createMenuTransitionSource(id: String, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *) {
+            self.matchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
         }
     }
 }
@@ -914,6 +1031,7 @@ struct GridPaperPattern: View {
 }
 
 struct CreateMenuContentView: View {
+    let namespace: Namespace.ID
     let onSelect: (MemoCategory) -> Void
 
     var body: some View {
@@ -950,6 +1068,10 @@ struct CreateMenuContentView: View {
                             .padding(.horizontal, 12)
                             .frame(height: 62)
                             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .createMenuTransitionSource(
+                                id: "create-menu-\(category.rawValue)",
+                                in: namespace
+                            )
                         }
                         .buttonStyle(CreateMenuRowStyle())
                     }

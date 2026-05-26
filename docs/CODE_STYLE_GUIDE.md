@@ -128,6 +128,7 @@ Spacing:
 
 - Pressable controls should include a subtle pressed scale effect.
 - Navigation to create/edit pages must always provide an obvious return path.
+- Any transition that expands an element from a first-level page into a second-level page must use the expanded-page navigation chrome: hide the native navigation bar during the transition and reveal the custom top navigation from the top downward, matching the memo-card-to-editor transition. Do not let the navigation bar slide in from right to left for these expanded transitions.
 - Save/delete actions should update state immediately and persist afterward.
 - Destructive actions should get confirmation in a future pass before production use.
 - Search should filter title and content.

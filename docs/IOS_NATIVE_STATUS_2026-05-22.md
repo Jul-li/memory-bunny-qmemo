@@ -34,6 +34,16 @@
 - Added the first pass of the home memo-list scroll effect: the top card scales gently after crossing the top threshold, preserves visual spacing, and avoids lingering top-edge artifacts.
 - Kept changes local to the native SwiftUI home screen and working UI rules.
 
+## 2026-05-27 Update
+
+- The editor page is now the main native editing surface instead of a bottom sheet.
+- Memo-card and create-category entry paths expand into the editor with custom top navigation that appears downward from the top.
+- Editor stickers support insertion, preview, drag, scale, rotation, text wrapping, long-press delete bubble, persistence, and restore after reopening.
+- The editor More entry keeps the existing small white circular style while using native `UIButton + UIMenu` behavior to avoid delayed SwiftUI `Menu` pressed-state and shadow artifacts.
+- More menu actions currently include pin/unpin and delete, with Q-style action icons.
+- The editor toolbar no longer shows a separate save button; editor state persists through the current memo update flow.
+- The native asset catalog contains current category, tab, action, logo, create-entry, memo sticker, and editor sticker resources.
+
 ## Current Known State
 
 - `xcodebuild` succeeds with:
@@ -46,7 +56,7 @@
 
 - Continue visual parity checks against the React Native reference for any remaining homepage details.
 - Manually verify search result tapping in the simulator after future search changes.
-- Optimize the edit page experience and polish editor details.
+- Continue editor feature development: text color, bold, italic, richer text style controls, and sticker/text wrapping refinements.
 - Build out the category page.
 - Build out the settings page.
 - Plan the App Store in-app purchase flow and product structure.

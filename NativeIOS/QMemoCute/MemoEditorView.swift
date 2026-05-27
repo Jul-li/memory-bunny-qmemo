@@ -227,11 +227,9 @@ struct MemoEditorView: View {
 
                 if shouldShowMoreButton {
                     editorMoreMenu
-                        .transition(.scale(scale: 0.86).combined(with: .opacity))
                 }
             }
             .animation(.spring(response: 0.24, dampingFraction: 0.86), value: isUndoControlVisible)
-            .animation(.spring(response: 0.24, dampingFraction: 0.86), value: shouldShowMoreButton)
             .padding(.horizontal, 20)
             .padding(.top, 10)
             .padding(.bottom, 10)
@@ -244,40 +242,16 @@ struct MemoEditorView: View {
     }
 
     private var editorMoreMenu: some View {
-        Menu {
-            Button {
+        EditorMoreMenuButton(
+            isPinned: isPinned,
+            onTogglePin: {
                 isPinned.toggle()
-            } label: {
-                MemoActionMenuLabel(
-                    title: isPinned ? "取消置顶" : "置顶",
-                    icon: isPinned ? "ActionUnpin" : "ActionPin"
-                )
-            }
-
-            Button(role: .destructive) {
+            },
+            onDelete: {
                 deleteOrDiscardDraft()
-            } label: {
-                MemoActionMenuLabel(title: "删除", icon: "ActionDelete")
             }
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 21, weight: .bold))
-                .foregroundStyle(Theme.Colors.text)
-                .frame(width: 44, height: 44)
-                .background(
-                    QMemoGlassBackground(
-                        shape: Circle(),
-                        tintOpacity: 0.20,
-                        fallbackFillOpacity: 0.84,
-                        strokeOpacity: 0.70,
-                        lineOpacity: 0.10
-                    )
-                )
-                .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 10, y: 4)
-                .contentShape(Circle())
-        }
-        .accessibilityLabel("更多")
-        .buttonStyle(.plain)
+        )
+        .frame(width: 44, height: 44)
     }
 
     private var navigationGradient: some View {
@@ -925,6 +899,63 @@ private struct EditableEditorStickerView: View {
                     }
             )
             .accessibilityLabel("贴纸")
+    }
+}
+
+private struct EditorMoreMenuButton: UIViewRepresentable {
+    let isPinned: Bool
+    let onTogglePin: () -> Void
+    let onDelete: () -> Void
+
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .system)
+        button.showsMenuAsPrimaryAction = true
+        button.changesSelectionAsPrimaryAction = false
+        button.setImage(UIImage(systemName: "ellipsis"), for: .normal)
+        button.tintColor = UIColor(red: 0x49 / 255, green: 0x39 / 255, blue: 0x2F / 255, alpha: 1)
+        button.backgroundColor = UIColor.white.withAlphaComponent(0.72)
+        button.layer.cornerRadius = 22
+        button.layer.borderWidth = 0
+        button.layer.borderColor = UIColor.clear.cgColor
+        button.layer.shadowColor = UIColor(red: 0xC6 / 255, green: 0x9C / 255, blue: 0x6D / 255, alpha: 1).cgColor
+        button.layer.shadowOpacity = 0.10
+        button.layer.shadowRadius = 10
+        button.layer.shadowOffset = CGSize(width: 0, height: 4)
+        button.clipsToBounds = false
+        button.accessibilityLabel = "更多"
+        button.contentHorizontalAlignment = .center
+        button.contentVerticalAlignment = .center
+        button.imageView?.contentMode = .scaleAspectFit
+        context.coordinator.configure(button)
+        return button
+    }
+
+    func updateUIView(_ button: UIButton, context: Context) {
+        context.coordinator.parent = self
+        context.coordinator.configure(button)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator {
+        var parent: EditorMoreMenuButton
+
+        init(parent: EditorMoreMenuButton) {
+            self.parent = parent
+        }
+
+        func configure(_ button: UIButton) {
+            let isPinned = parent.isPinned
+            let pinAction = UIAction(title: isPinned ? "取消置顶" : "置顶", image: UIImage(named: isPinned ? "ActionUnpin" : "ActionPin")) { [weak self] _ in
+                self?.parent.onTogglePin()
+            }
+            let deleteAction = UIAction(title: "删除", image: UIImage(named: "ActionDelete"), attributes: .destructive) { [weak self] _ in
+                self?.parent.onDelete()
+            }
+            button.menu = UIMenu(children: [pinAction, deleteAction])
+        }
     }
 }
 

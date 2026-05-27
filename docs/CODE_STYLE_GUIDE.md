@@ -20,6 +20,15 @@ If a later user request repeats an existing rule with different details, replace
 - Keep data access behind context or repository-style helpers; avoid direct storage calls from screen components.
 - Use `apply_patch`-style small edits and avoid unrelated refactors.
 
+## Native iOS Structure
+
+- Active native branch: `ios-native`.
+- Active native project: `NativeIOS/QMemoCute.xcodeproj`.
+- Native app code lives under `NativeIOS/QMemoCute/`.
+- Native visual assets live in `NativeIOS/QMemoCute/Assets.xcassets`; never depend on desktop-only source paths at runtime.
+- Prefer SwiftUI for screens and layout, but use UIKit wrappers when native iOS behavior is more stable or more faithful to the intended interaction.
+- Keep native changes scoped to the requested behavior. Do not rewrite a working SwiftUI component only to solve a small visual bug.
+
 ## State And Storage
 
 - Use `MemoContext` as the single source of truth for memo list state.
@@ -113,6 +122,18 @@ Spacing:
 - On the home screen, the header, search area, category filter, and `我的便签` section header stay fixed while scrolling; only the memo card list scrolls, starting `12` px below the `我的便签` row.
 - Use `Ionicons` from `@expo/vector-icons`; do not hand-roll icons when a library icon exists.
 
+## Native iOS Components
+
+- Native editor pages use a custom top navigation chrome for expanded transitions from first-level pages.
+- For any transition that expands from a first-level element into a second-level editor page, the navigation bar appears from the top downward.
+- The editor More entry keeps the existing 44 px white circular button, brown ellipsis icon, soft shadow, and native menu popover.
+- The editor More entry uses a native `UIButton + UIMenu` bridge when SwiftUI `Menu` causes delayed highlight, shadow, or pressed-state artifacts.
+- Do not add visible wrapper containers around More/menu entries to fix interaction bugs.
+- The editor bottom function area stays compact until the user enters an editing/tool interaction.
+- Stickers in the editor must save with the memo and restore when the memo is reopened.
+- Sticker placement supports drag, scale, rotation, and long-press delete through a small delete bubble.
+- Sticker/text wrapping should preserve readability and avoid covering text; refine wrapping geometry without changing unrelated editor layout.
+
 ## Layout Rules
 
 - Screens use `SafeAreaView`.
@@ -133,6 +154,13 @@ Spacing:
 - Destructive actions should get confirmation in a future pass before production use.
 - Search should filter title and content.
 - Pinned memos sort before unpinned memos.
+
+## Verification Rules
+
+- Build success alone is not enough for QMemo Cute interaction work.
+- After a UI or interaction fix, run the exact changed path in the simulator or on device before reporting completion.
+- If a fix touches a previously working interaction, do a quick regression pass on that interaction.
+- When a user reports a video or screenshot issue, inspect the visual evidence before changing implementation direction.
 
 ## Styling Change Rule
 

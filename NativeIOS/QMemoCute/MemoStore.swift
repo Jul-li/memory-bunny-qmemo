@@ -12,17 +12,38 @@ final class MemoStore: ObservableObject {
         load()
     }
 
-    func create(title: String, content: String, category: MemoCategory, isPinned: Bool) {
-        let memo = Memo(title: title, content: content, category: category, isPinned: isPinned)
+    func create(
+        title: String,
+        content: String,
+        category: MemoCategory,
+        isPinned: Bool,
+        stickers: [MemoSticker] = []
+    ) {
+        let memo = Memo(
+            title: title,
+            content: content,
+            category: category,
+            isPinned: isPinned,
+            stickers: stickers
+        )
         memos.append(memo)
         sortMemos()
     }
 
-    func update(_ memo: Memo, title: String, content: String, isPinned: Bool) {
+    func update(
+        _ memo: Memo,
+        title: String,
+        content: String,
+        isPinned: Bool,
+        stickers: [MemoSticker]? = nil
+    ) {
         guard let index = memos.firstIndex(where: { $0.id == memo.id }) else { return }
         memos[index].title = title
         memos[index].content = content
         memos[index].isPinned = isPinned
+        if let stickers {
+            memos[index].stickers = stickers
+        }
         memos[index].updatedAt = Date()
         sortMemos()
     }

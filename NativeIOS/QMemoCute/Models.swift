@@ -51,6 +51,31 @@ enum MemoCategory: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+struct MemoSticker: Identifiable, Codable, Equatable {
+    var id: UUID
+    var assetName: String
+    var positionX: Double
+    var positionY: Double
+    var scale: Double
+    var rotationDegrees: Double
+
+    init(
+        id: UUID = UUID(),
+        assetName: String,
+        positionX: Double,
+        positionY: Double,
+        scale: Double = 1,
+        rotationDegrees: Double = 0
+    ) {
+        self.id = id
+        self.assetName = assetName
+        self.positionX = positionX
+        self.positionY = positionY
+        self.scale = scale
+        self.rotationDegrees = rotationDegrees
+    }
+}
+
 struct Memo: Identifiable, Codable, Equatable {
     var id: UUID
     var title: String
@@ -59,6 +84,18 @@ struct Memo: Identifiable, Codable, Equatable {
     var isPinned: Bool
     var createdAt: Date
     var updatedAt: Date
+    var stickers: [MemoSticker]
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case content
+        case category
+        case isPinned
+        case createdAt
+        case updatedAt
+        case stickers
+    }
 
     init(
         id: UUID = UUID(),
@@ -67,7 +104,8 @@ struct Memo: Identifiable, Codable, Equatable {
         category: MemoCategory,
         isPinned: Bool = false,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        stickers: [MemoSticker] = []
     ) {
         self.id = id
         self.title = title
@@ -76,5 +114,18 @@ struct Memo: Identifiable, Codable, Equatable {
         self.isPinned = isPinned
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.stickers = stickers
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        content = try container.decode(String.self, forKey: .content)
+        category = try container.decode(MemoCategory.self, forKey: .category)
+        isPinned = try container.decode(Bool.self, forKey: .isPinned)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        stickers = try container.decodeIfPresent([MemoSticker].self, forKey: .stickers) ?? []
     }
 }

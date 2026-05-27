@@ -21,14 +21,24 @@ struct MemoEditorView: View {
     @State private var bodyTextHeight: CGFloat = 520
     @State private var undoStack: [MemoEditorSnapshot]
     @State private var isApplyingUndo = false
+    @State private var isUndoControlVisible = false
     @State private var isStickerPickerPresented = false
     @State private var placedStickers: [PlacedEditorSticker] = []
     @State private var selectedStickerID: UUID?
     @State private var stickerDeletePromptID: UUID?
+    @State private var shouldSkipPersistOnDisappear = false
     private let editorLineSpacing: CGFloat = 32
     private let editorBodyLineSpacing: CGFloat = 8
     private var canUndoInput: Bool {
         !undoStack.isEmpty
+    }
+    private var hasEditableDraftContent: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !placedStickers.isEmpty
+    }
+    private var shouldShowMoreButton: Bool {
+        memo != nil || hasEditableDraftContent
     }
     private var editorTopPadding: CGFloat {
         navigationChrome == .cardExpanded ? 76 : 18
@@ -42,8 +52,8 @@ struct MemoEditorView: View {
     private var editorBodyHeight: CGFloat {
         max(bodyTextHeight, 520)
     }
-    private var stickerExclusionRects: [CGRect] {
-        placedStickers.map(\.textExclusionRect)
+    private var stickerExclusionPaths: [UIBezierPath] {
+        placedStickers.flatMap(\.textExclusionPaths)
     }
     private var stickerPickerColumns: [GridItem] {
         [
@@ -63,6 +73,7 @@ struct MemoEditorView: View {
         _content = State(initialValue: memo?.content ?? "")
         _isPinned = State(initialValue: memo?.isPinned ?? false)
         _undoStack = State(initialValue: [])
+        _placedStickers = State(initialValue: memo?.stickers.map(PlacedEditorSticker.init) ?? [])
     }
 
     var body: some View {
@@ -90,7 +101,7 @@ struct MemoEditorView: View {
                         font: .systemFont(ofSize: 17, weight: .semibold),
                         textColor: UIColor(Theme.Colors.text),
                         lineSpacing: editorBodyLineSpacing,
-                        exclusionRects: stickerExclusionRects
+                        exclusionPaths: stickerExclusionPaths
                     )
                         .padding(.top, 20)
                         .frame(height: editorBodyHeight)
@@ -125,21 +136,21 @@ struct MemoEditorView: View {
         .navigationTitle(memo == nil ? "新建便签" : "编辑便签")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    undoLastInput()
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
+            if isUndoControlVisible {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        undoLastInput()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                    .accessibilityLabel("撤回")
                 }
-                .accessibilityLabel("撤回")
-                .disabled(!canUndoInput)
             }
 
-            ToolbarItem(placement: .confirmationAction) {
-                Button("保存") {
-                    save()
+            if shouldShowMoreButton {
+                ToolbarItem(placement: .confirmationAction) {
+                    editorMoreMenu
                 }
-                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .toolbar(navigationChrome == .cardExpanded ? .hidden : .visible, for: .navigationBar)
@@ -154,6 +165,7 @@ struct MemoEditorView: View {
             }
         }
         .onDisappear {
+            persistDraftIfNeeded()
             isCustomNavigationVisible = false
         }
         .onChange(of: title) { oldValue, _ in
@@ -189,61 +201,83 @@ struct MemoEditorView: View {
 
                 Spacer()
 
-                Button {
-                    undoLastInput()
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(canUndoInput ? Theme.Colors.text : Theme.Colors.muted.opacity(0.42))
-                        .frame(width: 44, height: 44)
-                        .background(
-                            QMemoGlassBackground(
-                                shape: Circle(),
-                                tintOpacity: 0.20,
-                                fallbackFillOpacity: 0.84,
-                                strokeOpacity: 0.70,
-                                lineOpacity: 0.10
+                if isUndoControlVisible {
+                    Button {
+                        undoLastInput()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(Theme.Colors.text)
+                            .frame(width: 44, height: 44)
+                            .background(
+                                QMemoGlassBackground(
+                                    shape: Circle(),
+                                    tintOpacity: 0.20,
+                                    fallbackFillOpacity: 0.84,
+                                    strokeOpacity: 0.70,
+                                    lineOpacity: 0.10
+                                )
                             )
-                        )
-                        .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 10, y: 4)
+                            .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 10, y: 4)
+                    }
+                    .accessibilityLabel("撤回")
+                    .buttonStyle(.plain)
+                    .transition(.scale(scale: 0.86).combined(with: .opacity))
                 }
-                .accessibilityLabel("撤回")
-                .buttonStyle(.plain)
-                .disabled(!canUndoInput)
 
-                Button {
-                    save()
-                } label: {
-                    Text("保存")
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(
-                            title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? Theme.Colors.muted.opacity(0.42)
-                                : Theme.Colors.text
-                        )
-                        .frame(width: 56, height: 44)
-                        .background(
-                            QMemoGlassBackground(
-                                shape: Capsule(),
-                                tintOpacity: 0.20,
-                                fallbackFillOpacity: 0.84,
-                                strokeOpacity: 0.70,
-                                lineOpacity: 0.10
-                            )
-                        )
-                        .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 10, y: 4)
+                if shouldShowMoreButton {
+                    editorMoreMenu
+                        .transition(.scale(scale: 0.86).combined(with: .opacity))
                 }
-                .buttonStyle(.plain)
-                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            .animation(.spring(response: 0.24, dampingFraction: 0.86), value: isUndoControlVisible)
+            .animation(.spring(response: 0.24, dampingFraction: 0.86), value: shouldShowMoreButton)
             .padding(.horizontal, 20)
             .padding(.top, 10)
+            .padding(.bottom, 10)
 
             Spacer()
         }
         .opacity(isCustomNavigationVisible ? 1 : 0)
         .offset(y: isCustomNavigationVisible ? 0 : -34)
         .allowsHitTesting(isCustomNavigationVisible)
+    }
+
+    private var editorMoreMenu: some View {
+        Menu {
+            Button {
+                isPinned.toggle()
+            } label: {
+                MemoActionMenuLabel(
+                    title: isPinned ? "取消置顶" : "置顶",
+                    icon: isPinned ? "ActionUnpin" : "ActionPin"
+                )
+            }
+
+            Button(role: .destructive) {
+                deleteOrDiscardDraft()
+            } label: {
+                MemoActionMenuLabel(title: "删除", icon: "ActionDelete")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 21, weight: .bold))
+                .foregroundStyle(Theme.Colors.text)
+                .frame(width: 44, height: 44)
+                .background(
+                    QMemoGlassBackground(
+                        shape: Circle(),
+                        tintOpacity: 0.20,
+                        fallbackFillOpacity: 0.84,
+                        strokeOpacity: 0.70,
+                        lineOpacity: 0.10
+                    )
+                )
+                .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 10, y: 4)
+                .contentShape(Circle())
+        }
+        .accessibilityLabel("更多")
+        .buttonStyle(.plain)
     }
 
     private var navigationGradient: some View {
@@ -462,9 +496,9 @@ struct MemoEditorView: View {
         HStack(spacing: 10) {
             Image(category.iconAsset)
                 .resizable()
-                .frame(width: 30, height: 30)
+                .frame(width: 28, height: 28)
             Text(category.title)
-                .font(.system(size: 18, weight: .black))
+                .font(.system(size: 17, weight: .black))
                 .foregroundStyle(Theme.Colors.text)
 
             Button {
@@ -475,25 +509,18 @@ struct MemoEditorView: View {
                 Image(systemName: "face.smiling")
                     .font(.system(size: 18, weight: .black))
                     .foregroundStyle(Theme.Colors.text)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 38, height: 38)
                     .background(Theme.Colors.surfaceStrong.opacity(0.52))
                     .clipShape(Circle())
             }
             .accessibilityLabel("贴纸")
             .buttonStyle(.plain)
-
-            Spacer()
-            Text("置顶")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Theme.Colors.text)
-            Toggle("置顶", isOn: $isPinned)
-                .labelsHidden()
         }
-        .padding(.horizontal, 18)
-        .frame(height: 64)
+        .padding(.horizontal, 16)
+        .frame(height: 54)
         .background(
             QMemoGlassBackground(
-                shape: RoundedRectangle(cornerRadius: 22, style: .continuous),
+                shape: Capsule(),
                 tintOpacity: 0.20,
                 fallbackFillOpacity: 0.78,
                 strokeOpacity: 0.66,
@@ -502,16 +529,48 @@ struct MemoEditorView: View {
         )
     }
 
-    private func save() {
+    private func persistDraftIfNeeded() {
+        guard !shouldSkipPersistOnDisappear else { return }
+        guard memo != nil || hasEditableDraftContent else { return }
+
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedTitle = cleanTitle.isEmpty ? "未命名便签" : cleanTitle
+        let storedStickers = placedStickers.map(\.memoSticker)
 
         if let memo {
-            store.update(memo, title: cleanTitle, content: cleanContent, isPinned: isPinned)
-        } else {
-            store.create(title: cleanTitle, content: cleanContent, category: category, isPinned: isPinned)
-        }
+            guard
+                storedTitle != memo.title
+                    || cleanContent != memo.content
+                    || isPinned != memo.isPinned
+                    || storedStickers != memo.stickers
+            else {
+                return
+            }
 
+            store.update(
+                memo,
+                title: storedTitle,
+                content: cleanContent,
+                isPinned: isPinned,
+                stickers: storedStickers
+            )
+        } else {
+            store.create(
+                title: storedTitle,
+                content: cleanContent,
+                category: category,
+                isPinned: isPinned,
+                stickers: storedStickers
+            )
+        }
+    }
+
+    private func deleteOrDiscardDraft() {
+        shouldSkipPersistOnDisappear = true
+        if let memo {
+            store.delete(memo)
+        }
         dismiss()
     }
 
@@ -523,6 +582,7 @@ struct MemoEditorView: View {
         guard previousSnapshot != currentSnapshot else { return }
         guard undoStack.last != previousSnapshot else { return }
 
+        isUndoControlVisible = true
         undoStack.append(previousSnapshot)
         if undoStack.count > 60 {
             undoStack.removeFirst(undoStack.count - 60)
@@ -609,27 +669,70 @@ private struct EditorStickerOption: Identifiable {
 
 private struct PlacedEditorSticker: Identifiable, Equatable {
     private static let baseSize: CGFloat = 120
-    private static let wrapPadding: CGFloat = 6
+    private static let wrapPadding: CGFloat = 4
     private static let wrapVisualScale: CGFloat = 1.02
 
-    let id = UUID()
+    let id: UUID
     let assetName: String
     var position: CGPoint = CGPoint(x: 254, y: 184)
     var scale: CGFloat = 1
     var rotation: Angle = .zero
 
+    init(
+        id: UUID = UUID(),
+        assetName: String,
+        position: CGPoint = CGPoint(x: 254, y: 184),
+        scale: CGFloat = 1,
+        rotation: Angle = .zero
+    ) {
+        self.id = id
+        self.assetName = assetName
+        self.position = position
+        self.scale = scale
+        self.rotation = rotation
+    }
+
+    init(memoSticker: MemoSticker) {
+        self.init(
+            id: memoSticker.id,
+            assetName: memoSticker.assetName,
+            position: CGPoint(x: memoSticker.positionX, y: memoSticker.positionY),
+            scale: CGFloat(memoSticker.scale),
+            rotation: .degrees(memoSticker.rotationDegrees)
+        )
+    }
+
     var displaySize: CGFloat {
         Self.baseSize * scale
     }
 
-    var textExclusionRect: CGRect {
-        let size = displaySize * Self.wrapVisualScale + Self.wrapPadding * 2
-        return CGRect(
-            x: position.x - size / 2,
-            y: position.y - size / 2,
-            width: size,
-            height: size
-        )
+    var textExclusionPaths: [UIBezierPath] {
+        EditorStickerWrapShapeCache.shared.normalizedBandRects(for: assetName).map { normalizedRect in
+            let displayRect = CGRect(
+                x: position.x - displaySize / 2 + normalizedRect.minX * displaySize,
+                y: position.y - displaySize / 2 + normalizedRect.minY * displaySize,
+                width: normalizedRect.width * displaySize,
+                height: normalizedRect.height * displaySize
+            )
+                .insetBy(dx: -Self.wrapPadding, dy: -Self.wrapPadding)
+
+            let scaledRect = displayRect.insetBy(
+                dx: -(displayRect.width * (Self.wrapVisualScale - 1)) / 2,
+                dy: -(displayRect.height * (Self.wrapVisualScale - 1)) / 2
+            )
+            let path = UIBezierPath(rect: scaledRect)
+
+            guard abs(rotation.degrees) > 0.1 else {
+                return path
+            }
+
+            var transform = CGAffineTransform.identity
+            transform = transform.translatedBy(x: position.x, y: position.y)
+            transform = transform.rotated(by: CGFloat(rotation.radians))
+            transform = transform.translatedBy(x: -position.x, y: -position.y)
+            path.apply(transform)
+            return path
+        }
     }
 
     var deleteBubbleY: CGFloat {
@@ -639,6 +742,123 @@ private struct PlacedEditorSticker: Identifiable, Equatable {
         }
 
         return preferredY
+    }
+
+    var memoSticker: MemoSticker {
+        MemoSticker(
+            id: id,
+            assetName: assetName,
+            positionX: Double(position.x),
+            positionY: Double(position.y),
+            scale: Double(scale),
+            rotationDegrees: rotation.degrees
+        )
+    }
+}
+
+private final class EditorStickerWrapShapeCache {
+    static let shared = EditorStickerWrapShapeCache()
+
+    private let alphaThreshold: UInt8 = 18
+    private let bandCount = 18
+    private var cachedRects: [String: [CGRect]] = [:]
+
+    func normalizedBandRects(for assetName: String) -> [CGRect] {
+        if let rects = cachedRects[assetName] {
+            return rects
+        }
+
+        let rects = buildNormalizedBandRects(for: assetName)
+        cachedRects[assetName] = rects
+        return rects
+    }
+
+    private func buildNormalizedBandRects(for assetName: String) -> [CGRect] {
+        guard
+            let image = UIImage(named: assetName),
+            let cgImage = image.cgImage,
+            let alphaData = alphaData(from: cgImage)
+        else {
+            return [CGRect(x: 0, y: 0, width: 1, height: 1)]
+        }
+
+        let imageWidth = cgImage.width
+        let imageHeight = cgImage.height
+        let fittedRect = fittedImageRect(width: imageWidth, height: imageHeight)
+        let rowsPerBand = max(1, Int(ceil(Double(imageHeight) / Double(bandCount))))
+        var rects: [CGRect] = []
+
+        for bandStartY in stride(from: 0, to: imageHeight, by: rowsPerBand) {
+            let bandEndY = min(imageHeight, bandStartY + rowsPerBand)
+            var minX = imageWidth
+            var maxX = -1
+            var minY = imageHeight
+            var maxY = -1
+
+            for y in bandStartY..<bandEndY {
+                for x in 0..<imageWidth {
+                    let alphaIndex = (y * imageWidth + x) * 4 + 3
+                    guard alphaData[alphaIndex] > alphaThreshold else { continue }
+
+                    minX = min(minX, x)
+                    maxX = max(maxX, x)
+                    minY = min(minY, y)
+                    maxY = max(maxY, y)
+                }
+            }
+
+            guard maxX >= minX, maxY >= minY else { continue }
+
+            let normalizedRect = CGRect(
+                x: fittedRect.minX + (CGFloat(minX) / CGFloat(imageWidth)) * fittedRect.width,
+                y: fittedRect.minY + (CGFloat(minY) / CGFloat(imageHeight)) * fittedRect.height,
+                width: (CGFloat(maxX - minX + 1) / CGFloat(imageWidth)) * fittedRect.width,
+                height: (CGFloat(maxY - minY + 1) / CGFloat(imageHeight)) * fittedRect.height
+            )
+            rects.append(normalizedRect)
+        }
+
+        return rects.isEmpty ? [CGRect(x: 0, y: 0, width: 1, height: 1)] : rects
+    }
+
+    private func alphaData(from cgImage: CGImage) -> [UInt8]? {
+        let width = cgImage.width
+        let height = cgImage.height
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        var data = [UInt8](repeating: 0, count: height * bytesPerRow)
+
+        guard let context = CGContext(
+            data: &data,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return data
+    }
+
+    private func fittedImageRect(width: Int, height: Int) -> CGRect {
+        let imageWidth = CGFloat(width)
+        let imageHeight = CGFloat(height)
+        guard imageWidth > 0, imageHeight > 0 else {
+            return CGRect(x: 0, y: 0, width: 1, height: 1)
+        }
+
+        let aspect = imageWidth / imageHeight
+        if aspect >= 1 {
+            let fittedHeight = 1 / aspect
+            return CGRect(x: 0, y: (1 - fittedHeight) / 2, width: 1, height: fittedHeight)
+        }
+
+        let fittedWidth = aspect
+        return CGRect(x: (1 - fittedWidth) / 2, y: 0, width: fittedWidth, height: 1)
     }
 }
 
@@ -715,7 +935,7 @@ struct MemoBodyTextView: UIViewRepresentable {
     let font: UIFont
     let textColor: UIColor
     let lineSpacing: CGFloat
-    let exclusionRects: [CGRect]
+    let exclusionPaths: [UIBezierPath]
 
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
@@ -732,7 +952,7 @@ struct MemoBodyTextView: UIViewRepresentable {
         textView.alwaysBounceVertical = false
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.typingAttributes = textAttributes
-        textView.textContainer.exclusionPaths = exclusionPaths(for: textView)
+        textView.textContainer.exclusionPaths = boundedExclusionPaths(for: textView)
         textView.attributedText = attributedString(for: text)
         return textView
     }
@@ -742,7 +962,7 @@ struct MemoBodyTextView: UIViewRepresentable {
         textView.textColor = textColor
         textView.typingAttributes = textAttributes
         textView.isScrollEnabled = false
-        textView.textContainer.exclusionPaths = exclusionPaths(for: textView)
+        textView.textContainer.exclusionPaths = boundedExclusionPaths(for: textView)
 
         defer {
             updateHeight(for: textView)
@@ -795,24 +1015,23 @@ struct MemoBodyTextView: UIViewRepresentable {
         }
     }
 
-    private func exclusionPaths(for textView: UITextView) -> [UIBezierPath] {
+    private func boundedExclusionPaths(for textView: UITextView) -> [UIBezierPath] {
         let containerWidth = textView.bounds.width
         guard containerWidth > 0 else { return [] }
 
-        return exclusionRects.compactMap { rect in
-            let boundedRect = rect.intersection(
-                CGRect(
-                    x: 0,
-                    y: 0,
-                    width: containerWidth,
-                    height: max(textView.bounds.height, calculatedHeight)
-                )
-            )
-            guard !boundedRect.isNull, boundedRect.width > 0, boundedRect.height > 0 else {
+        let containerRect = CGRect(
+            x: 0,
+            y: 0,
+            width: containerWidth,
+            height: max(textView.bounds.height, calculatedHeight)
+        )
+
+        return exclusionPaths.compactMap { path in
+            guard path.bounds.intersects(containerRect) else {
                 return nil
             }
 
-            return UIBezierPath(rect: boundedRect)
+            return path
         }
     }
 

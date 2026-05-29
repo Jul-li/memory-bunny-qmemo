@@ -38,6 +38,7 @@ struct ContentView: View {
                 switch selectedTab {
                 case .home:
                     HomeView(
+                        selectedTab: $selectedTab,
                         isTabBarHidden: $isTabBarHidden,
                         isHomeOverlayPresented: $isHomeOverlayPresented
                     )
@@ -49,7 +50,7 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if !isTabBarHidden {
+            if !isTabBarHidden && selectedTab != .home {
                 ZStack(alignment: .bottom) {
                     bottomTabBarChrome
 
@@ -57,8 +58,6 @@ struct ContentView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 8)
                 }
-                .blur(radius: isHomeOverlayPresented ? 16 : 0)
-                .opacity(isHomeOverlayPresented ? 0.24 : 1)
                 .allowsHitTesting(!isHomeOverlayPresented)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(.easeOut(duration: 0.24), value: isHomeOverlayPresented)
@@ -108,6 +107,7 @@ struct ContentView: View {
         }
         .allowsHitTesting(false)
     }
+
 }
 
 private struct WindowBackgroundSetter: UIViewRepresentable {

@@ -118,6 +118,7 @@ Spacing:
 - Bottom tab bar icons should use PNG files from `assets/tab-icons/`, sourced from `Q版icon` files with the `bar_` prefix.
 - The home floating create button should keep a `24` px vertical gap above the bottom tab bar.
 - Tapping the home floating create button starts from the original button shape: the entry first moves up `16` px with a subtle scale change, then morphs in place from the pink circular plus button into a white rounded create menu with Bezier-eased size, color, radius, opacity, and content reveal. While the menu is open, hide the separate floating create button; tapping the blank backdrop closes the menu. Menu options use existing memo categories and category icons, must show all five categories, and the content area should support vertical scrolling if constrained. Each create menu option is a full-width row with no default color block, a pressed light-gray background, a title plus auxiliary description capped at 20 Chinese characters, and an icon sized to the combined two-line text height.
+- Opening the home create menu must keep the bottom tab bar visible in its original position under the backdrop layer. Do not hide or fade the tab bar itself to simulate the backdrop.
 - Tapping another bottom tab while the home create menu is open should close the menu.
 - On the home screen, the header, search area, category filter, and `我的便签` section header stay fixed while scrolling; only the memo card list scrolls, starting `12` px below the `我的便签` row.
 - Use `Ionicons` from `@expo/vector-icons`; do not hand-roll icons when a library icon exists.
@@ -138,6 +139,7 @@ Spacing:
 - Editor format popup title and close control must match the sticker popup header: 18pt black title, 34pt circular glass close button, 14pt bold `xmark`, and 18pt panel padding.
 - Editor bottom operation popups must overlay above the bottom operation bar instead of participating in the bar's layout flow. Opening a popup must not stretch, shift, or resize the bottom operation bar or editor content.
 - The editor bottom format entry displays the text `格式`, not `Aa`. Its popup opens above the bottom operation bar and uses the same popup language as other editor operation popups.
+- Editor format controls keep block style and inline style as separate states. Selecting `标题`, `小标题`, or `副标题` turns on the bold inline state; selecting `正文` or `等宽样式` turns bold off. Bold, italic, underline, and strikethrough can be toggled independently and combined. Selecting `等宽样式` shows the body editor inside a subtle gray input box.
 
 ## Layout Rules
 

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var store: MemoStore
+    @Binding var selectedTab: AppTab
     @Binding var isTabBarHidden: Bool
     @Binding var isHomeOverlayPresented: Bool
     @State private var searchText = ""
@@ -57,16 +58,25 @@ struct HomeView: View {
                 .zIndex(0)
 
                 if isSearchPresented || isCreateMenuPresented {
-                    Button {
-                        closeOverlays()
-                    } label: {
+                    ZStack {
                         QMemoGlassScrim(tintOpacity: 0.20)
                             .opacity(0.66)
                             .ignoresSafeArea()
+
+                        Color.black.opacity(0.001)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                closeOverlays()
+                            }
                     }
-                    .buttonStyle(.plain)
                     .transition(.opacity)
                     .zIndex(2)
+                }
+
+                if !isTabBarHidden {
+                    homeBottomTabBar
+                        .zIndex(1)
                 }
 
                 if isSearchPresented && !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -104,7 +114,7 @@ struct HomeView: View {
                 }
                 .blur(radius: isSearchPresented ? 16 : 0)
                 .animation(.easeOut(duration: 0.24), value: isSearchPresented)
-                .zIndex(isCreateMenuPresented ? 6 : 1)
+                .zIndex(createEntryLayerIndex)
             }
             .navigationDestination(for: EditorRoute.self) { route in
                 editorDestination(for: route)
@@ -122,6 +132,58 @@ struct HomeView: View {
         .onChange(of: isSearchPresented || isCreateMenuPresented) { _, isPresented in
             isHomeOverlayPresented = isPresented
         }
+    }
+
+    private var createEntryLayerIndex: Double {
+        if isCreateMenuPresented {
+            return 6
+        }
+
+        if isSearchPresented {
+            return 1
+        }
+
+        return 4
+    }
+
+    private var homeBottomTabBar: some View {
+        ZStack(alignment: .bottom) {
+            VStack {
+                Spacer()
+                qMemoChromeMaterial(
+                    tintOpacity: 0.16,
+                    mask: LinearGradient(
+                        colors: [.clear, .clear, .black.opacity(0.62), .black],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .allowsHitTesting(false)
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Theme.Colors.background.opacity(0),
+                            Theme.Colors.background.opacity(0),
+                            Theme.Colors.background.opacity(0.62),
+                            Theme.Colors.background.opacity(0.78),
+                            Theme.Colors.background.opacity(1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(height: 142)
+                .ignoresSafeArea(edges: .bottom)
+                .allowsHitTesting(false)
+            }
+            .allowsHitTesting(false)
+
+            CuteNativeTabBar(selectedTab: $selectedTab)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+                .allowsHitTesting(!isHomeOverlayPresented)
+        }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private var header: some View {

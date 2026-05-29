@@ -50,7 +50,10 @@
 - The sticker popup is the canonical editor operation popup style: compact glass panel, 18pt black title, 34pt circular glass close button, 18pt padding, and soft shadow.
 - The format popup has been aligned to the sticker popup header, spacing, close icon, glass container, and rounded/shadow treatment.
 - Format popup presentation is scoped to the bottom operation overlay and no longer participates in the operation bar layout flow, preventing the bar and editor content from stretching when the popup opens.
-- Editor format controls currently expose UI for title, subtitle, body, monospaced style, bold, italic, underline, strikethrough, text background, and color selection; the formatting commands are still UI-only placeholders until rich text editing is implemented.
+- Editor format controls now include initial native state behavior: title/subtitle/caption turn bold on, body/monospace turn bold off, bold/italic/underline/strikethrough can combine, and monospace shows the body editor in a subtle gray input box. This is still uniform editor-body formatting, not persisted per text range.
+- Added native asset-catalog SVG resources for the format controls: bold, italic, underline, strikethrough, and text background.
+- Fixed home create-menu layering so the bottom tab bar stays in its original position under the page scrim and is not hidden, faded, or covered by a separate bottom-only overlay.
+- Replaced the create-menu backdrop `Button` wrapper with a non-pressing display scrim plus transparent tap layer so tapping blank space does not feel like two separate close actions.
 - Current editor sticker behavior remains: insert sticker, preview from the picker, drag, scale, rotate, delete through long press bubble, wrap text around stickers, persist, and restore.
 
 ## Current Known State
@@ -66,7 +69,7 @@
 - Continue visual parity checks against the React Native reference for any remaining homepage details.
 - Manually verify search result tapping in the simulator after future search changes.
 - Continue editor feature development: text color, bold, italic, richer text style controls, and sticker/text wrapping refinements.
-- Implement the actual rich text formatting behavior behind the current format popup controls.
+- Implement full rich text behavior behind the current format popup controls, including selected-range formatting and persistence.
 - Continue tuning the editor popup open/close motion against the sticker popup standard.
 - Build out the category page.
 - Build out the settings page.

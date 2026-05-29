@@ -28,6 +28,8 @@ struct MemoEditorView: View {
     @State private var selectedStickerID: UUID?
     @State private var stickerDeletePromptID: UUID?
     @State private var shouldSkipPersistOnDisappear = false
+    @State private var selectedBlockStyle: EditorBlockStyle = .body
+    @State private var activeInlineStyles: Set<EditorInlineStyle> = []
     private let editorLineSpacing: CGFloat = 32
     private let editorBodyLineSpacing: CGFloat = 8
     private var canUndoInput: Bool {
@@ -52,6 +54,30 @@ struct MemoEditorView: View {
     }
     private var editorBodyHeight: CGFloat {
         max(bodyTextHeight, 520)
+    }
+    private var editorBodyContainerHeight: CGFloat {
+        editorBodyHeight + (isMonospaceInputActive ? 28 : 0)
+    }
+    private var isMonospaceInputActive: Bool {
+        selectedBlockStyle == .monospace
+    }
+    private var editorBodyFont: UIFont {
+        let weight = activeInlineStyles.contains(.bold) ? UIFont.Weight.bold : selectedBlockStyle.bodyFontWeight
+        let baseFont: UIFont
+
+        if selectedBlockStyle == .monospace {
+            baseFont = .monospacedSystemFont(ofSize: selectedBlockStyle.bodyFontSize, weight: weight)
+        } else {
+            baseFont = .systemFont(ofSize: selectedBlockStyle.bodyFontSize, weight: weight)
+        }
+
+        guard activeInlineStyles.contains(.italic),
+              let descriptor = baseFont.fontDescriptor.withSymbolicTraits(.traitItalic)
+        else {
+            return baseFont
+        }
+
+        return UIFont(descriptor: descriptor, size: selectedBlockStyle.bodyFontSize)
     }
     private var stickerExclusionPaths: [UIBezierPath] {
         placedStickers.flatMap(\.textExclusionPaths)
@@ -96,16 +122,9 @@ struct MemoEditorView: View {
                         .foregroundStyle(Theme.Colors.muted.opacity(0.72))
                         .padding(.top, 6)
 
-                    MemoBodyTextView(
-                        text: $content,
-                        calculatedHeight: $bodyTextHeight,
-                        font: .systemFont(ofSize: 17, weight: .semibold),
-                        textColor: UIColor(Theme.Colors.text),
-                        lineSpacing: editorBodyLineSpacing,
-                        exclusionPaths: stickerExclusionPaths
-                    )
+                    editorBodyInput
                         .padding(.top, 20)
-                        .frame(height: editorBodyHeight)
+                        .frame(height: editorBodyContainerHeight)
                         .overlay(alignment: .topLeading) {
                             editorStickerLayer
                         }
@@ -336,6 +355,26 @@ struct MemoEditorView: View {
         }
     }
 
+    private var editorBodyInput: some View {
+        MemoBodyTextView(
+            text: $content,
+            calculatedHeight: $bodyTextHeight,
+            font: editorBodyFont,
+            textColor: UIColor(Theme.Colors.text),
+            lineSpacing: editorBodyLineSpacing,
+            isUnderlined: activeInlineStyles.contains(.underline),
+            isStruckThrough: activeInlineStyles.contains(.strikethrough),
+            exclusionPaths: stickerExclusionPaths
+        )
+        .padding(isMonospaceInputActive ? EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14) : EdgeInsets())
+        .background {
+            if isMonospaceInputActive {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.black.opacity(0.06))
+            }
+        }
+    }
+
     private var editorStickerLayer: some View {
         ZStack(alignment: .topLeading) {
             ForEach($placedStickers) { $sticker in
@@ -479,7 +518,12 @@ struct MemoEditorView: View {
     }
 
     private var formatPanel: some View {
-        EditorFormatPanelView {
+        EditorFormatPanelView(
+            selectedBlockStyle: selectedBlockStyle,
+            activeInlineStyles: activeInlineStyles,
+            onSelectBlockStyle: selectBlockStyle,
+            onToggleInlineStyle: toggleInlineStyle
+        ) {
             withAnimation(.easeOut(duration: 0.18)) {
                 isFormatPanelPresented = false
             }
@@ -631,6 +675,24 @@ struct MemoEditorView: View {
         }
     }
 
+    private func selectBlockStyle(_ blockStyle: EditorBlockStyle) {
+        selectedBlockStyle = blockStyle
+
+        if blockStyle.activatesBoldInlineStyle {
+            activeInlineStyles.insert(.bold)
+        } else {
+            activeInlineStyles.remove(.bold)
+        }
+    }
+
+    private func toggleInlineStyle(_ inlineStyle: EditorInlineStyle) {
+        if activeInlineStyles.contains(inlineStyle) {
+            activeInlineStyles.remove(inlineStyle)
+        } else {
+            activeInlineStyles.insert(inlineStyle)
+        }
+    }
+
     private func addSticker(assetName: String) {
         let sticker = PlacedEditorSticker(assetName: assetName)
         placedStickers.append(sticker)
@@ -688,6 +750,54 @@ private struct MemoEditorSnapshot: Equatable {
     let content: String
 }
 
+private enum EditorBlockStyle: String, CaseIterable {
+    case title
+    case subtitle
+    case caption
+    case body
+    case monospace
+
+    var bodyFontSize: CGFloat {
+        switch self {
+        case .title:
+            22
+        case .subtitle:
+            20
+        case .caption:
+            18
+        case .body:
+            17
+        case .monospace:
+            16
+        }
+    }
+
+    var bodyFontWeight: UIFont.Weight {
+        switch self {
+        case .title, .subtitle, .caption:
+            .regular
+        case .body, .monospace:
+            .regular
+        }
+    }
+
+    var activatesBoldInlineStyle: Bool {
+        switch self {
+        case .title, .subtitle, .caption:
+            true
+        case .body, .monospace:
+            false
+        }
+    }
+}
+
+private enum EditorInlineStyle: String, Hashable {
+    case bold
+    case italic
+    case underline
+    case strikethrough
+}
+
 private struct EditorStickerOption: Identifiable {
     let assetName: String
     let title: String
@@ -698,20 +808,24 @@ private struct EditorStickerOption: Identifiable {
 }
 
 private struct EditorFormatPanelView: View {
+    let selectedBlockStyle: EditorBlockStyle
+    let activeInlineStyles: Set<EditorInlineStyle>
+    let onSelectBlockStyle: (EditorBlockStyle) -> Void
+    let onToggleInlineStyle: (EditorInlineStyle) -> Void
     let onDismiss: () -> Void
 
     private let textStyles = [
-        EditorTextStyleOption(title: "标题", font: .system(size: 20, weight: .bold)),
-        EditorTextStyleOption(title: "小标题", font: .system(size: 18, weight: .semibold)),
-        EditorTextStyleOption(title: "副标题", font: .system(size: 16, weight: .medium)),
-        EditorTextStyleOption(title: "正文", font: .system(size: 15, weight: .regular)),
-        EditorTextStyleOption(title: "等宽样式", font: .system(size: 15, weight: .regular, design: .monospaced))
+        EditorTextStyleOption(style: .title, title: "标题", font: .system(size: 20, weight: .bold)),
+        EditorTextStyleOption(style: .subtitle, title: "小标题", font: .system(size: 18, weight: .semibold)),
+        EditorTextStyleOption(style: .caption, title: "副标题", font: .system(size: 16, weight: .medium)),
+        EditorTextStyleOption(style: .body, title: "正文", font: .system(size: 15, weight: .regular)),
+        EditorTextStyleOption(style: .monospace, title: "等宽样式", font: .system(size: 15, weight: .regular, design: .monospaced))
     ]
     private let inlineStyles = [
-        ("加粗", "bold"),
-        ("倾斜", "italic"),
-        ("下划线", "underline"),
-        ("划线", "strikethrough")
+        EditorInlineStyleOption(style: .bold, title: "加粗", assetName: "FormatBold"),
+        EditorInlineStyleOption(style: .italic, title: "倾斜", assetName: "FormatItalic"),
+        EditorInlineStyleOption(style: .underline, title: "下划线", assetName: "FormatUnderline"),
+        EditorInlineStyleOption(style: .strikethrough, title: "划线", assetName: "FormatStrikethrough")
     ]
 
     var body: some View {
@@ -746,13 +860,23 @@ private struct EditorFormatPanelView: View {
 
             HStack(spacing: 0) {
                 ForEach(textStyles) { option in
-                    Button {} label: {
+                    let isSelected = selectedBlockStyle == option.style
+
+                    Button {
+                        withAnimation(.easeOut(duration: 0.14)) {
+                            onSelectBlockStyle(option.style)
+                        }
+                    } label: {
                         Text(option.title)
                             .font(option.font)
-                            .foregroundStyle(Color.primary)
+                            .foregroundStyle(isSelected ? Theme.Colors.text : Color.primary.opacity(0.68))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
-                            .frame(maxWidth: .infinity)
+                            .frame(maxWidth: .infinity, minHeight: 40)
+                            .background(
+                                Capsule()
+                                    .fill(isSelected ? Color.white.opacity(0.62) : Color.clear)
+                            )
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(option.title)
@@ -761,11 +885,18 @@ private struct EditorFormatPanelView: View {
 
             HStack(spacing: 16) {
                 HStack(spacing: 0) {
-                    ForEach(Array(inlineStyles.enumerated()), id: \.element.0) { index, item in
-                        let title = item.0
-                        let systemImage = item.1
+                    ForEach(Array(inlineStyles.enumerated()), id: \.element.id) { index, item in
+                        let isSelected = activeInlineStyles.contains(item.style)
 
-                        formatSegmentButton(systemImage: systemImage, accessibilityLabel: title)
+                        formatSegmentButton(
+                            assetName: item.assetName,
+                            accessibilityLabel: item.title,
+                            isSelected: isSelected
+                        ) {
+                            withAnimation(.easeOut(duration: 0.12)) {
+                                onToggleInlineStyle(item.style)
+                            }
+                        }
 
                         if index < inlineStyles.count - 1 {
                             Divider()
@@ -777,7 +908,12 @@ private struct EditorFormatPanelView: View {
                 .clipShape(Capsule())
 
                 HStack(spacing: 0) {
-                    formatSegmentButton(systemImage: "pencil.tip", accessibilityLabel: "文本背景", width: 50)
+                    formatSegmentButton(
+                        assetName: "FormatTextBackground",
+                        accessibilityLabel: "文本背景",
+                        isSelected: false,
+                        width: 50
+                    ) {}
 
                     Divider()
                         .frame(height: 44)
@@ -799,12 +935,29 @@ private struct EditorFormatPanelView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
-    private func formatSegmentButton(systemImage: String, accessibilityLabel: String, width: CGFloat = 50) -> some View {
-        Button {} label: {
-            Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(Color.primary)
-                .frame(width: width, height: 52)
+    private func formatSegmentButton(
+        assetName: String,
+        accessibilityLabel: String,
+        isSelected: Bool,
+        width: CGFloat = 50,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ZStack {
+                if isSelected {
+                    Circle()
+                        .fill(Color.white.opacity(0.72))
+                        .frame(width: 34, height: 34)
+                }
+
+                Image(assetName)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(isSelected ? Theme.Colors.text : Color.primary.opacity(0.64))
+                    .frame(width: 24, height: 24)
+            }
+            .frame(width: width, height: 52)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -812,11 +965,22 @@ private struct EditorFormatPanelView: View {
 }
 
 private struct EditorTextStyleOption: Identifiable {
+    let style: EditorBlockStyle
     let title: String
     let font: Font
 
     var id: String {
-        title
+        style.rawValue
+    }
+}
+
+private struct EditorInlineStyleOption: Identifiable {
+    let style: EditorInlineStyle
+    let title: String
+    let assetName: String
+
+    var id: String {
+        style.rawValue
     }
 }
 
@@ -1152,6 +1316,8 @@ struct MemoBodyTextView: UIViewRepresentable {
     let font: UIFont
     let textColor: UIColor
     let lineSpacing: CGFloat
+    let isUnderlined: Bool
+    let isStruckThrough: Bool
     let exclusionPaths: [UIBezierPath]
 
     func makeUIView(context: Context) -> UITextView {
@@ -1171,10 +1337,12 @@ struct MemoBodyTextView: UIViewRepresentable {
         textView.typingAttributes = textAttributes
         textView.textContainer.exclusionPaths = boundedExclusionPaths(for: textView)
         textView.attributedText = attributedString(for: text)
+        context.coordinator.textAttributesSignature = textAttributesSignature
         return textView
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.parent = self
         textView.font = font
         textView.textColor = textColor
         textView.typingAttributes = textAttributes
@@ -1185,11 +1353,14 @@ struct MemoBodyTextView: UIViewRepresentable {
             updateHeight(for: textView)
         }
 
-        guard textView.text != text else { return }
+        let shouldRefreshText = textView.text != text
+            || context.coordinator.textAttributesSignature != textAttributesSignature
+        guard shouldRefreshText else { return }
 
         let selectedRange = textView.selectedRange
         textView.attributedText = attributedString(for: text)
         textView.selectedRange = clampedRange(selectedRange, in: text)
+        context.coordinator.textAttributesSignature = textAttributesSignature
     }
 
     func makeCoordinator() -> Coordinator {
@@ -1201,11 +1372,31 @@ struct MemoBodyTextView: UIViewRepresentable {
         paragraphStyle.lineSpacing = lineSpacing
         paragraphStyle.lineBreakMode = .byWordWrapping
 
-        return [
+        var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: textColor,
             .paragraphStyle: paragraphStyle
         ]
+
+        if isUnderlined {
+            attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        }
+
+        if isStruckThrough {
+            attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        }
+
+        return attributes
+    }
+
+    private var textAttributesSignature: String {
+        [
+            font.fontName,
+            String(format: "%.2f", font.pointSize),
+            String(format: "%.2f", lineSpacing),
+            isUnderlined ? "underline" : "no-underline",
+            isStruckThrough ? "strike" : "no-strike"
+        ].joined(separator: "|")
     }
 
     private func attributedString(for text: String) -> NSAttributedString {
@@ -1253,7 +1444,8 @@ struct MemoBodyTextView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
-        private var parent: MemoBodyTextView
+        var parent: MemoBodyTextView
+        var textAttributesSignature = ""
 
         init(_ parent: MemoBodyTextView) {
             self.parent = parent

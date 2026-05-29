@@ -124,6 +124,7 @@ Spacing:
 
 ## Native iOS Components
 
+- Prefer the latest native iOS component first for controls, menus, materials, and navigation chrome. Only implement a custom coded version from the design rules when the native component's result is visibly inadequate or blocks the required interaction.
 - Native editor pages use a custom top navigation chrome for expanded transitions from first-level pages.
 - For any transition that expands from a first-level element into a second-level editor page, the navigation bar appears from the top downward.
 - The editor More entry keeps the existing 44 px white circular button, brown ellipsis icon, soft shadow, and native menu popover.
@@ -133,6 +134,10 @@ Spacing:
 - Stickers in the editor must save with the memo and restore when the memo is reopened.
 - Sticker placement supports drag, scale, rotation, and long-press delete through a small delete bubble.
 - Sticker/text wrapping should preserve readability and avoid covering text; refine wrapping geometry without changing unrelated editor layout.
+- Editor bottom operation popups share one common visual standard. Use the sticker popup as the source of truth for popup spacing, title font, close icon size, close button glass style, rounded container, shadow, and inner padding.
+- Editor format popup title and close control must match the sticker popup header: 18pt black title, 34pt circular glass close button, 14pt bold `xmark`, and 18pt panel padding.
+- Editor bottom operation popups must overlay above the bottom operation bar instead of participating in the bar's layout flow. Opening a popup must not stretch, shift, or resize the bottom operation bar or editor content.
+- The editor bottom format entry displays the text `格式`, not `Aa`. Its popup opens above the bottom operation bar and uses the same popup language as other editor operation popups.
 
 ## Layout Rules
 

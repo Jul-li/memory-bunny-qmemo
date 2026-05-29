@@ -23,6 +23,7 @@ struct MemoEditorView: View {
     @State private var isApplyingUndo = false
     @State private var isUndoControlVisible = false
     @State private var isStickerPickerPresented = false
+    @State private var isFormatPanelPresented = false
     @State private var placedStickers: [PlacedEditorSticker] = []
     @State private var selectedStickerID: UUID?
     @State private var stickerDeletePromptID: UUID?
@@ -321,6 +322,17 @@ struct MemoEditorView: View {
                     .padding(.horizontal, 20)
                     .padding(.bottom, 16)
             }
+
+            if isFormatPanelPresented {
+                VStack {
+                    Spacer()
+                    formatPanel
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 82)
+                }
+                .transition(.scale(scale: 0.96, anchor: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.24, dampingFraction: 0.88), value: isFormatPanelPresented)
+            }
         }
     }
 
@@ -466,31 +478,75 @@ struct MemoEditorView: View {
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
-    private var functionPanel: some View {
-        HStack(spacing: 10) {
-            Image(category.iconAsset)
-                .resizable()
-                .frame(width: 28, height: 28)
-            Text(category.title)
-                .font(.system(size: 17, weight: .black))
-                .foregroundStyle(Theme.Colors.text)
-
-            Button {
-                withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)) {
-                    isStickerPickerPresented = true
-                }
-            } label: {
-                Image(systemName: "face.smiling")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(Theme.Colors.text)
-                    .frame(width: 38, height: 38)
-                    .background(Theme.Colors.surfaceStrong.opacity(0.52))
-                    .clipShape(Circle())
+    private var formatPanel: some View {
+        EditorFormatPanelView {
+            withAnimation(.easeOut(duration: 0.18)) {
+                isFormatPanelPresented = false
             }
-            .accessibilityLabel("贴纸")
-            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            QMemoGlassBackground(
+                shape: RoundedRectangle(cornerRadius: 30, style: .continuous),
+                tintOpacity: 0.20,
+                fallbackFillOpacity: 0.82,
+                strokeOpacity: 0.66,
+                lineOpacity: 0.12
+            )
+        )
+        .shadow(color: Theme.Colors.shadow.opacity(0.18), radius: 24, y: 10)
+    }
+
+    private var functionPanel: some View {
+        HStack(spacing: 12) {
+            Label {
+                Text(category.title)
+                    .font(.system(size: 17, weight: .black))
+            } icon: {
+                Image(category.iconAsset)
+                    .resizable()
+                    .frame(width: 28, height: 28)
+            }
+            .foregroundStyle(Theme.Colors.text)
+            .labelStyle(.titleAndIcon)
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 0) {
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        isStickerPickerPresented = false
+                        isFormatPanelPresented = true
+                    }
+                } label: {
+                    Text("格式")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: 126, height: 38)
+                }
+                .accessibilityLabel("格式")
+
+                Divider()
+                    .frame(height: 28)
+
+                Button {
+                    withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)) {
+                        isFormatPanelPresented = false
+                        isStickerPickerPresented = true
+                    }
+                } label: {
+                    Image(systemName: "face.smiling")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 52, height: 38)
+                }
+                .accessibilityLabel("贴纸")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.Colors.text)
+            .background(Color(.secondarySystemFill))
+            .clipShape(Capsule())
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
         .frame(height: 54)
         .background(
             QMemoGlassBackground(
@@ -638,6 +694,129 @@ private struct EditorStickerOption: Identifiable {
 
     var id: String {
         assetName
+    }
+}
+
+private struct EditorFormatPanelView: View {
+    let onDismiss: () -> Void
+
+    private let textStyles = [
+        EditorTextStyleOption(title: "标题", font: .system(size: 20, weight: .bold)),
+        EditorTextStyleOption(title: "小标题", font: .system(size: 18, weight: .semibold)),
+        EditorTextStyleOption(title: "副标题", font: .system(size: 16, weight: .medium)),
+        EditorTextStyleOption(title: "正文", font: .system(size: 15, weight: .regular)),
+        EditorTextStyleOption(title: "等宽样式", font: .system(size: 15, weight: .regular, design: .monospaced))
+    ]
+    private let inlineStyles = [
+        ("加粗", "bold"),
+        ("倾斜", "italic"),
+        ("下划线", "underline"),
+        ("划线", "strikethrough")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center) {
+                Text("格式")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(Theme.Colors.text)
+
+                Spacer()
+
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(Theme.Colors.text)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            QMemoGlassBackground(
+                                shape: Circle(),
+                                tintOpacity: 0.18,
+                                fallbackFillOpacity: 0.82,
+                                strokeOpacity: 0.62,
+                                lineOpacity: 0.10
+                            )
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关闭")
+            }
+
+            HStack(spacing: 0) {
+                ForEach(textStyles) { option in
+                    Button {} label: {
+                        Text(option.title)
+                            .font(option.font)
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(option.title)
+                }
+            }
+
+            HStack(spacing: 16) {
+                HStack(spacing: 0) {
+                    ForEach(Array(inlineStyles.enumerated()), id: \.element.0) { index, item in
+                        let title = item.0
+                        let systemImage = item.1
+
+                        formatSegmentButton(systemImage: systemImage, accessibilityLabel: title)
+
+                        if index < inlineStyles.count - 1 {
+                            Divider()
+                                .frame(height: 44)
+                        }
+                    }
+                }
+                .background(Color(.secondarySystemFill))
+                .clipShape(Capsule())
+
+                HStack(spacing: 0) {
+                    formatSegmentButton(systemImage: "pencil.tip", accessibilityLabel: "文本背景", width: 50)
+
+                    Divider()
+                        .frame(height: 44)
+
+                    Button {} label: {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 24, height: 24)
+                            .frame(width: 50, height: 52)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("背景颜色")
+                }
+                .background(Color(.secondarySystemFill))
+                .clipShape(Capsule())
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func formatSegmentButton(systemImage: String, accessibilityLabel: String, width: CGFloat = 50) -> some View {
+        Button {} label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 22, weight: .black))
+                .foregroundStyle(Color.primary)
+                .frame(width: width, height: 52)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct EditorTextStyleOption: Identifiable {
+    let title: String
+    let font: Font
+
+    var id: String {
+        title
     }
 }
 
@@ -908,31 +1087,38 @@ private struct EditorMoreMenuButton: UIViewRepresentable {
     let onDelete: () -> Void
 
     func makeUIView(context: Context) -> UIButton {
-        let button = UIButton(type: .system)
+        let button = UIButton(configuration: buttonConfiguration())
         button.showsMenuAsPrimaryAction = true
         button.changesSelectionAsPrimaryAction = false
-        button.setImage(UIImage(systemName: "ellipsis"), for: .normal)
-        button.tintColor = UIColor(red: 0x49 / 255, green: 0x39 / 255, blue: 0x2F / 255, alpha: 1)
-        button.backgroundColor = UIColor.white.withAlphaComponent(0.72)
-        button.layer.cornerRadius = 22
-        button.layer.borderWidth = 0
-        button.layer.borderColor = UIColor.clear.cgColor
-        button.layer.shadowColor = UIColor(red: 0xC6 / 255, green: 0x9C / 255, blue: 0x6D / 255, alpha: 1).cgColor
-        button.layer.shadowOpacity = 0.10
-        button.layer.shadowRadius = 10
-        button.layer.shadowOffset = CGSize(width: 0, height: 4)
-        button.clipsToBounds = false
         button.accessibilityLabel = "更多"
-        button.contentHorizontalAlignment = .center
-        button.contentVerticalAlignment = .center
-        button.imageView?.contentMode = .scaleAspectFit
         context.coordinator.configure(button)
         return button
     }
 
     func updateUIView(_ button: UIButton, context: Context) {
         context.coordinator.parent = self
+        button.configuration = buttonConfiguration()
         context.coordinator.configure(button)
+    }
+
+    private func buttonConfiguration() -> UIButton.Configuration {
+        var configuration: UIButton.Configuration
+        if #available(iOS 26.0, *) {
+            configuration = .glass()
+        } else {
+            configuration = .bordered()
+        }
+
+        configuration.image = UIImage(systemName: "ellipsis")
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 21, weight: .bold)
+        configuration.baseForegroundColor = UIColor(red: 0x49 / 255, green: 0x39 / 255, blue: 0x2F / 255, alpha: 1)
+        configuration.cornerStyle = .capsule
+        configuration.buttonSize = .large
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+        if #available(iOS 16.0, *) {
+            configuration.indicator = .none
+        }
+        return configuration
     }
 
     func makeCoordinator() -> Coordinator {

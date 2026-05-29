@@ -44,6 +44,15 @@
 - The editor toolbar no longer shows a separate save button; editor state persists through the current memo update flow.
 - The native asset catalog contains current category, tab, action, logo, create-entry, memo sticker, and editor sticker resources.
 
+## 2026-05-29 Update
+
+- Editor bottom operation bar now uses `格式` as the format entry label and keeps the sticker entry as a separate icon button.
+- The sticker popup is the canonical editor operation popup style: compact glass panel, 18pt black title, 34pt circular glass close button, 18pt padding, and soft shadow.
+- The format popup has been aligned to the sticker popup header, spacing, close icon, glass container, and rounded/shadow treatment.
+- Format popup presentation is scoped to the bottom operation overlay and no longer participates in the operation bar layout flow, preventing the bar and editor content from stretching when the popup opens.
+- Editor format controls currently expose UI for title, subtitle, body, monospaced style, bold, italic, underline, strikethrough, text background, and color selection; the formatting commands are still UI-only placeholders until rich text editing is implemented.
+- Current editor sticker behavior remains: insert sticker, preview from the picker, drag, scale, rotate, delete through long press bubble, wrap text around stickers, persist, and restore.
+
 ## Current Known State
 
 - `xcodebuild` succeeds with:
@@ -57,6 +66,8 @@
 - Continue visual parity checks against the React Native reference for any remaining homepage details.
 - Manually verify search result tapping in the simulator after future search changes.
 - Continue editor feature development: text color, bold, italic, richer text style controls, and sticker/text wrapping refinements.
+- Implement the actual rich text formatting behavior behind the current format popup controls.
+- Continue tuning the editor popup open/close motion against the sticker popup standard.
 - Build out the category page.
 - Build out the settings page.
 - Plan the App Store in-app purchase flow and product structure.

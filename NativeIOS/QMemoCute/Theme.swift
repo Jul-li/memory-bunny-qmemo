@@ -72,6 +72,89 @@ struct QMemoGlassScrim: View {
     }
 }
 
+struct DeleteConfirmationOverlay: View {
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        ZStack {
+            QMemoGlassScrim(tintOpacity: 0.20)
+                .opacity(0.68)
+                .ignoresSafeArea()
+
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onCancel()
+                }
+
+            ZStack(alignment: .top) {
+                VStack(spacing: 18) {
+                    Text("便签删除后将无法恢复！确定删除当前便签吗？")
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(Theme.Colors.text)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(5)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 54)
+
+                    HStack(spacing: 12) {
+                        Button {
+                            onConfirm()
+                        } label: {
+                            Text("确认删除")
+                                .font(.system(size: 16, weight: .black))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48)
+                                .background(Theme.Colors.accentStrong)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            onCancel()
+                        } label: {
+                            Text("取消")
+                                .font(.system(size: 16, weight: .black))
+                                .foregroundStyle(Theme.Colors.text)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48)
+                                .background(Theme.Colors.surfaceStrong.opacity(0.70))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 18)
+                .background(
+                    QMemoGlassBackground(
+                        shape: RoundedRectangle(cornerRadius: 30, style: .continuous),
+                        tintOpacity: 0.20,
+                        fallbackFillOpacity: 0.86,
+                        strokeOpacity: 0.66,
+                        lineOpacity: 0.12
+                    )
+                )
+                .shadow(color: Theme.Colors.shadow.opacity(0.18), radius: 24, y: 10)
+                .padding(.top, 54)
+
+                Image("PopDelete")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 112, height: 112)
+                    .offset(y: -2)
+                    .allowsHitTesting(false)
+            }
+            .padding(.horizontal, 34)
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+    }
+}
+
 @ViewBuilder
 func qMemoChromeMaterial<Mask: View>(tintOpacity: Double = 0.18, mask: Mask) -> some View {
     Group {

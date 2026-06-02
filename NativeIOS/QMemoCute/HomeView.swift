@@ -20,6 +20,7 @@ struct HomeView: View {
     @State private var isCreateMenuContentVisible = false
     @State private var isCreateEntryPressed = false
     @State private var isCreateIconTucked = false
+    @State private var memoPendingDeletion: Memo?
     @Namespace private var editorTransitionNamespace
 
     private var filteredMemos: [Memo] {
@@ -72,6 +73,18 @@ struct HomeView: View {
                     }
                     .transition(.opacity)
                     .zIndex(2)
+                }
+
+                if memoPendingDeletion != nil {
+                    DeleteConfirmationOverlay(
+                        onCancel: {
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                memoPendingDeletion = nil
+                            }
+                        },
+                        onConfirm: confirmPendingMemoDeletion
+                    )
+                    .zIndex(10)
                 }
 
                 if !isTabBarHidden {
@@ -308,6 +321,9 @@ struct HomeView: View {
                                 },
                                 editAction: {
                                     openEditor(category: memo.category, memo: memo, transition: .standard)
+                                },
+                                deleteAction: {
+                                    requestMemoDeletion(memo)
                                 }
                             ) {
                                 openEditor(category: memo.category, memo: memo, transition: .card)
@@ -386,6 +402,9 @@ struct HomeView: View {
                             },
                             editAction: {
                                 openEditor(category: memo.category, memo: memo, transition: .standard)
+                            },
+                            deleteAction: {
+                                requestMemoDeletion(memo)
                             }
                         ) {
                             openEditor(category: memo.category, memo: memo, transition: .card)
@@ -458,6 +477,21 @@ struct HomeView: View {
 
     private func createMenuTransitionID(for category: MemoCategory) -> String {
         "create-menu-\(category.rawValue)"
+    }
+
+    private func requestMemoDeletion(_ memo: Memo) {
+        withAnimation(.easeOut(duration: 0.18)) {
+            memoPendingDeletion = memo
+        }
+    }
+
+    private func confirmPendingMemoDeletion() {
+        guard let memo = memoPendingDeletion else { return }
+
+        withAnimation(.easeOut(duration: 0.18)) {
+            memoPendingDeletion = nil
+        }
+        store.delete(memo)
     }
 
     @ViewBuilder
@@ -876,10 +910,10 @@ private enum MemoListAnchor {
 }
 
 struct MemoCardView: View {
-    @EnvironmentObject private var store: MemoStore
     let memo: Memo
     let pinAction: () -> Void
     let editAction: () -> Void
+    let deleteAction: () -> Void
     let action: () -> Void
     private let cardMinHeight: CGFloat = 190
     private let cardPadding: CGFloat = 22
@@ -970,7 +1004,7 @@ struct MemoCardView: View {
                     MemoActionMenuLabel(title: "编辑", icon: "ActionEdit")
                 }
                 Button(role: .destructive) {
-                    store.delete(memo)
+                    deleteAction()
                 } label: {
                     MemoActionMenuLabel(title: "删除", icon: "ActionDelete")
                 }
@@ -1000,7 +1034,7 @@ struct MemoCardView: View {
                 MemoActionMenuLabel(title: "编辑", icon: "ActionEdit")
             }
             Button(role: .destructive) {
-                store.delete(memo)
+                deleteAction()
             } label: {
                 MemoActionMenuLabel(title: "删除", icon: "ActionDelete")
             }

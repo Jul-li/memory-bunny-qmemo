@@ -24,12 +24,14 @@ struct MemoEditorView: View {
     @State private var isUndoControlVisible = false
     @State private var isStickerPickerPresented = false
     @State private var isFormatPanelPresented = false
+    @State private var isDeleteConfirmationPresented = false
     @State private var placedStickers: [PlacedEditorSticker] = []
     @State private var selectedStickerID: UUID?
     @State private var stickerDeletePromptID: UUID?
     @State private var shouldSkipPersistOnDisappear = false
     @State private var selectedBlockStyle: EditorBlockStyle = .body
     @State private var activeInlineStyles: Set<EditorInlineStyle> = []
+    @State private var pendingFormatCommand: EditorFormatCommand?
     private let editorLineSpacing: CGFloat = 32
     private let editorBodyLineSpacing: CGFloat = 8
     private var canUndoInput: Bool {
@@ -54,30 +56,6 @@ struct MemoEditorView: View {
     }
     private var editorBodyHeight: CGFloat {
         max(bodyTextHeight, 520)
-    }
-    private var editorBodyContainerHeight: CGFloat {
-        editorBodyHeight + (isMonospaceInputActive ? 28 : 0)
-    }
-    private var isMonospaceInputActive: Bool {
-        selectedBlockStyle == .monospace
-    }
-    private var editorBodyFont: UIFont {
-        let weight = activeInlineStyles.contains(.bold) ? UIFont.Weight.bold : selectedBlockStyle.bodyFontWeight
-        let baseFont: UIFont
-
-        if selectedBlockStyle == .monospace {
-            baseFont = .monospacedSystemFont(ofSize: selectedBlockStyle.bodyFontSize, weight: weight)
-        } else {
-            baseFont = .systemFont(ofSize: selectedBlockStyle.bodyFontSize, weight: weight)
-        }
-
-        guard activeInlineStyles.contains(.italic),
-              let descriptor = baseFont.fontDescriptor.withSymbolicTraits(.traitItalic)
-        else {
-            return baseFont
-        }
-
-        return UIFont(descriptor: descriptor, size: selectedBlockStyle.bodyFontSize)
     }
     private var stickerExclusionPaths: [UIBezierPath] {
         placedStickers.flatMap(\.textExclusionPaths)
@@ -124,7 +102,7 @@ struct MemoEditorView: View {
 
                     editorBodyInput
                         .padding(.top, 20)
-                        .frame(height: editorBodyContainerHeight)
+                        .frame(height: editorBodyHeight)
                         .overlay(alignment: .topLeading) {
                             editorStickerLayer
                         }
@@ -144,6 +122,19 @@ struct MemoEditorView: View {
             if isStickerPickerPresented {
                 stickerPickerOverlay
                     .zIndex(4)
+                    .animation(.spring(response: 0.30, dampingFraction: 0.74), value: isStickerPickerPresented)
+            }
+
+            if isDeleteConfirmationPresented {
+                DeleteConfirmationOverlay(
+                    onCancel: {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            isDeleteConfirmationPresented = false
+                        }
+                    },
+                    onConfirm: confirmDeleteOrDiscardDraft
+                )
+                .zIndex(10)
             }
 
             if navigationChrome == .cardExpanded {
@@ -268,7 +259,7 @@ struct MemoEditorView: View {
                 isPinned.toggle()
             },
             onDelete: {
-                deleteOrDiscardDraft()
+                requestDeleteConfirmation()
             }
         )
         .frame(width: 44, height: 44)
@@ -349,8 +340,8 @@ struct MemoEditorView: View {
                         .padding(.horizontal, 20)
                         .padding(.bottom, 82)
                 }
-                .transition(.scale(scale: 0.96, anchor: .bottom).combined(with: .opacity))
-                .animation(.spring(response: 0.24, dampingFraction: 0.88), value: isFormatPanelPresented)
+                .transition(.formatPanelReveal)
+                .animation(.spring(response: 0.30, dampingFraction: 0.74), value: isFormatPanelPresented)
             }
         }
     }
@@ -359,20 +350,13 @@ struct MemoEditorView: View {
         MemoBodyTextView(
             text: $content,
             calculatedHeight: $bodyTextHeight,
-            font: editorBodyFont,
+            selectedBlockStyle: $selectedBlockStyle,
+            activeInlineStyles: $activeInlineStyles,
+            pendingFormatCommand: $pendingFormatCommand,
             textColor: UIColor(Theme.Colors.text),
             lineSpacing: editorBodyLineSpacing,
-            isUnderlined: activeInlineStyles.contains(.underline),
-            isStruckThrough: activeInlineStyles.contains(.strikethrough),
             exclusionPaths: stickerExclusionPaths
         )
-        .padding(isMonospaceInputActive ? EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14) : EdgeInsets())
-        .background {
-            if isMonospaceInputActive {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.black.opacity(0.06))
-            }
-        }
     }
 
     private var editorStickerLayer: some View {
@@ -421,7 +405,7 @@ struct MemoEditorView: View {
     private var stickerPickerOverlay: some View {
         ZStack {
             Button {
-                withAnimation(.easeOut(duration: 0.18)) {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.74)) {
                     isStickerPickerPresented = false
                 }
             } label: {
@@ -442,7 +426,7 @@ struct MemoEditorView: View {
                         Spacer()
 
                         Button {
-                            withAnimation(.easeOut(duration: 0.18)) {
+                            withAnimation(.spring(response: 0.30, dampingFraction: 0.74)) {
                                 isStickerPickerPresented = false
                             }
                         } label: {
@@ -514,7 +498,7 @@ struct MemoEditorView: View {
                 .padding(.bottom, 96)
             }
         }
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .transition(.formatPanelReveal)
     }
 
     private var formatPanel: some View {
@@ -524,7 +508,7 @@ struct MemoEditorView: View {
             onSelectBlockStyle: selectBlockStyle,
             onToggleInlineStyle: toggleInlineStyle
         ) {
-            withAnimation(.easeOut(duration: 0.18)) {
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.74)) {
                 isFormatPanelPresented = false
             }
         }
@@ -558,7 +542,7 @@ struct MemoEditorView: View {
 
             HStack(spacing: 0) {
                 Button {
-                    withAnimation(.easeOut(duration: 0.18)) {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.74)) {
                         isStickerPickerPresented = false
                         isFormatPanelPresented = true
                     }
@@ -573,7 +557,7 @@ struct MemoEditorView: View {
                     .frame(height: 28)
 
                 Button {
-                    withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)) {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.74)) {
                         isFormatPanelPresented = false
                         isStickerPickerPresented = true
                     }
@@ -648,6 +632,19 @@ struct MemoEditorView: View {
         dismiss()
     }
 
+    private func requestDeleteConfirmation() {
+        withAnimation(.easeOut(duration: 0.18)) {
+            isDeleteConfirmationPresented = true
+        }
+    }
+
+    private func confirmDeleteOrDiscardDraft() {
+        withAnimation(.easeOut(duration: 0.18)) {
+            isDeleteConfirmationPresented = false
+        }
+        deleteOrDiscardDraft()
+    }
+
     private func recordUndoSnapshot(title previousTitle: String, content previousContent: String) {
         guard !isApplyingUndo else { return }
 
@@ -677,6 +674,7 @@ struct MemoEditorView: View {
 
     private func selectBlockStyle(_ blockStyle: EditorBlockStyle) {
         selectedBlockStyle = blockStyle
+        pendingFormatCommand = EditorFormatCommand(kind: .block(blockStyle))
 
         if blockStyle.activatesBoldInlineStyle {
             activeInlineStyles.insert(.bold)
@@ -686,11 +684,15 @@ struct MemoEditorView: View {
     }
 
     private func toggleInlineStyle(_ inlineStyle: EditorInlineStyle) {
+        let shouldActivate = !activeInlineStyles.contains(inlineStyle)
+
         if activeInlineStyles.contains(inlineStyle) {
             activeInlineStyles.remove(inlineStyle)
         } else {
             activeInlineStyles.insert(inlineStyle)
         }
+
+        pendingFormatCommand = EditorFormatCommand(kind: .inline(inlineStyle, isActive: shouldActivate))
     }
 
     private func addSticker(assetName: String) {
@@ -699,7 +701,7 @@ struct MemoEditorView: View {
         selectedStickerID = sticker.id
         stickerDeletePromptID = nil
 
-        withAnimation(.easeOut(duration: 0.18)) {
+        withAnimation(.spring(response: 0.30, dampingFraction: 0.74)) {
             isStickerPickerPresented = false
         }
     }
@@ -760,34 +762,29 @@ private enum EditorBlockStyle: String, CaseIterable {
     var bodyFontSize: CGFloat {
         switch self {
         case .title:
-            22
-        case .subtitle:
             20
+        case .subtitle:
+            16
         case .caption:
             18
         case .body:
-            17
+            14
         case .monospace:
-            16
+            14
         }
     }
 
     var bodyFontWeight: UIFont.Weight {
         switch self {
         case .title, .subtitle, .caption:
-            .regular
+            .semibold
         case .body, .monospace:
             .regular
         }
     }
 
     var activatesBoldInlineStyle: Bool {
-        switch self {
-        case .title, .subtitle, .caption:
-            true
-        case .body, .monospace:
-            false
-        }
+        false
     }
 }
 
@@ -807,6 +804,30 @@ private struct EditorStickerOption: Identifiable {
     }
 }
 
+private struct FormatPanelRevealModifier: ViewModifier {
+    let progress: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(
+                x: 0.32 + 0.68 * progress,
+                y: 0.72 + 0.28 * progress,
+                anchor: .bottom
+            )
+            .offset(y: 18 * (1 - progress))
+    }
+}
+
+private extension AnyTransition {
+    static var formatPanelReveal: AnyTransition {
+        .modifier(
+            active: FormatPanelRevealModifier(progress: 0),
+            identity: FormatPanelRevealModifier(progress: 1)
+        )
+        .combined(with: .opacity)
+    }
+}
+
 private struct EditorFormatPanelView: View {
     let selectedBlockStyle: EditorBlockStyle
     let activeInlineStyles: Set<EditorInlineStyle>
@@ -815,11 +836,11 @@ private struct EditorFormatPanelView: View {
     let onDismiss: () -> Void
 
     private let textStyles = [
-        EditorTextStyleOption(style: .title, title: "标题", font: .system(size: 20, weight: .bold)),
-        EditorTextStyleOption(style: .subtitle, title: "小标题", font: .system(size: 18, weight: .semibold)),
-        EditorTextStyleOption(style: .caption, title: "副标题", font: .system(size: 16, weight: .medium)),
-        EditorTextStyleOption(style: .body, title: "正文", font: .system(size: 15, weight: .regular)),
-        EditorTextStyleOption(style: .monospace, title: "等宽样式", font: .system(size: 15, weight: .regular, design: .monospaced))
+        EditorTextStyleOption(style: .title, title: "标题", font: .system(size: 20, weight: .semibold)),
+        EditorTextStyleOption(style: .caption, title: "副标题", font: .system(size: 18, weight: .semibold)),
+        EditorTextStyleOption(style: .subtitle, title: "小标题", font: .system(size: 16, weight: .semibold)),
+        EditorTextStyleOption(style: .body, title: "正文", font: .system(size: 14, weight: .regular)),
+        EditorTextStyleOption(style: .monospace, title: "等宽样式", font: .system(size: 14, weight: .regular, design: .monospaced))
     ]
     private let inlineStyles = [
         EditorInlineStyleOption(style: .bold, title: "加粗", assetName: "FormatBold"),
@@ -827,6 +848,8 @@ private struct EditorFormatPanelView: View {
         EditorInlineStyleOption(style: .underline, title: "下划线", assetName: "FormatUnderline"),
         EditorInlineStyleOption(style: .strikethrough, title: "划线", assetName: "FormatStrikethrough")
     ]
+    private let selectedFill = Color(hex: "FDE8A4")
+    private let selectedForeground = Color(hex: "F1920D")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -857,6 +880,7 @@ private struct EditorFormatPanelView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("关闭")
             }
+            .padding(.horizontal, 18)
 
             HStack(spacing: 0) {
                 ForEach(textStyles) { option in
@@ -869,21 +893,23 @@ private struct EditorFormatPanelView: View {
                     } label: {
                         Text(option.title)
                             .font(option.font)
-                            .foregroundStyle(isSelected ? Theme.Colors.text : Color.primary.opacity(0.68))
+                            .foregroundStyle(isSelected ? selectedForeground : Color.primary.opacity(0.68))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                             .frame(maxWidth: .infinity, minHeight: 40)
                             .background(
                                 Capsule()
-                                    .fill(isSelected ? Color.white.opacity(0.62) : Color.clear)
+                                    .fill(isSelected ? selectedFill : Color.clear)
                             )
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(option.title)
                 }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 14)
 
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 HStack(spacing: 0) {
                     ForEach(Array(inlineStyles.enumerated()), id: \.element.id) { index, item in
                         let isSelected = activeInlineStyles.contains(item.style)
@@ -891,7 +917,8 @@ private struct EditorFormatPanelView: View {
                         formatSegmentButton(
                             assetName: item.assetName,
                             accessibilityLabel: item.title,
-                            isSelected: isSelected
+                            isSelected: isSelected,
+                            width: nil
                         ) {
                             withAnimation(.easeOut(duration: 0.12)) {
                                 onToggleInlineStyle(item.style)
@@ -900,11 +927,12 @@ private struct EditorFormatPanelView: View {
 
                         if index < inlineStyles.count - 1 {
                             Divider()
-                                .frame(height: 44)
+                                .frame(height: 40)
                         }
                     }
                 }
-                .background(Color(.secondarySystemFill))
+                .frame(maxWidth: .infinity)
+                .background(Color(.quaternarySystemFill))
                 .clipShape(Capsule())
 
                 HStack(spacing: 0) {
@@ -916,22 +944,28 @@ private struct EditorFormatPanelView: View {
                     ) {}
 
                     Divider()
-                        .frame(height: 44)
+                        .frame(height: 40)
 
                     Button {} label: {
                         Circle()
                             .fill(Color.orange)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 1)
+                            )
                             .frame(width: 24, height: 24)
-                            .frame(width: 50, height: 52)
+                            .frame(width: 50, height: 48)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("背景颜色")
                 }
-                .background(Color(.secondarySystemFill))
+                .background(Color(.quaternarySystemFill))
                 .clipShape(Capsule())
             }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 14)
         }
-        .padding(18)
+        .padding(.vertical, 18)
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
@@ -939,25 +973,19 @@ private struct EditorFormatPanelView: View {
         assetName: String,
         accessibilityLabel: String,
         isSelected: Bool,
-        width: CGFloat = 50,
+        width: CGFloat? = 50,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            ZStack {
-                if isSelected {
-                    Circle()
-                        .fill(Color.white.opacity(0.72))
-                        .frame(width: 34, height: 34)
-                }
-
-                Image(assetName)
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(isSelected ? Theme.Colors.text : Color.primary.opacity(0.64))
-                    .frame(width: 24, height: 24)
-            }
-            .frame(width: width, height: 52)
+            Image(assetName)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(isSelected ? selectedForeground : Color.primary.opacity(0.64))
+                .frame(width: 24, height: 24)
+                .frame(width: width, height: 48)
+                .frame(maxWidth: width == nil ? .infinity : nil)
+                .background(isSelected ? selectedFill : Color.clear)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -981,6 +1009,16 @@ private struct EditorInlineStyleOption: Identifiable {
 
     var id: String {
         style.rawValue
+    }
+}
+
+private struct EditorFormatCommand: Equatable {
+    let id = UUID()
+    let kind: Kind
+
+    enum Kind: Equatable {
+        case block(EditorBlockStyle)
+        case inline(EditorInlineStyle, isActive: Bool)
     }
 }
 
@@ -1309,23 +1347,26 @@ private struct EditorMoreMenuButton: UIViewRepresentable {
     }
 }
 
-struct MemoBodyTextView: UIViewRepresentable {
+private struct MemoBodyTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var calculatedHeight: CGFloat
+    @Binding var selectedBlockStyle: EditorBlockStyle
+    @Binding var activeInlineStyles: Set<EditorInlineStyle>
+    @Binding var pendingFormatCommand: EditorFormatCommand?
 
-    let font: UIFont
     let textColor: UIColor
     let lineSpacing: CGFloat
-    let isUnderlined: Bool
-    let isStruckThrough: Bool
     let exclusionPaths: [UIBezierPath]
 
-    func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
+    private static let blockStyleAttribute = NSAttributedString.Key("QMemoBlockStyle")
+    private static let inlineStylesAttribute = NSAttributedString.Key("QMemoInlineStyles")
+    private static let lineHeightRatio: CGFloat = 1.25
+
+    func makeUIView(context: Context) -> RichTextView {
+        let textView = RichTextView()
         textView.delegate = context.coordinator
         textView.backgroundColor = .clear
         textView.isOpaque = false
-        textView.font = font
         textView.textColor = textColor
         textView.textContainerInset = .zero
         textView.textContainer.lineFragmentPadding = 0
@@ -1334,18 +1375,16 @@ struct MemoBodyTextView: UIViewRepresentable {
         textView.isScrollEnabled = false
         textView.alwaysBounceVertical = false
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        textView.typingAttributes = textAttributes
+        textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
         textView.textContainer.exclusionPaths = boundedExclusionPaths(for: textView)
         textView.attributedText = attributedString(for: text)
-        context.coordinator.textAttributesSignature = textAttributesSignature
+        textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
         return textView
     }
 
-    func updateUIView(_ textView: UITextView, context: Context) {
+    func updateUIView(_ textView: RichTextView, context: Context) {
         context.coordinator.parent = self
-        textView.font = font
         textView.textColor = textColor
-        textView.typingAttributes = textAttributes
         textView.isScrollEnabled = false
         textView.textContainer.exclusionPaths = boundedExclusionPaths(for: textView)
 
@@ -1353,54 +1392,236 @@ struct MemoBodyTextView: UIViewRepresentable {
             updateHeight(for: textView)
         }
 
-        let shouldRefreshText = textView.text != text
-            || context.coordinator.textAttributesSignature != textAttributesSignature
-        guard shouldRefreshText else { return }
+        if textView.text != text {
+            let selectedRange = textView.selectedRange
+            textView.attributedText = attributedString(for: text)
+            textView.selectedRange = clampedRange(selectedRange, in: text)
+        }
 
-        let selectedRange = textView.selectedRange
-        textView.attributedText = attributedString(for: text)
-        textView.selectedRange = clampedRange(selectedRange, in: text)
-        context.coordinator.textAttributesSignature = textAttributesSignature
+        if let command = pendingFormatCommand,
+           context.coordinator.appliedFormatCommandID != command.id {
+            apply(command, to: textView, context: context)
+            context.coordinator.appliedFormatCommandID = command.id
+        } else {
+            textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
+        }
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
 
-    private var textAttributes: [NSAttributedString.Key: Any] {
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = lineSpacing
-        paragraphStyle.lineBreakMode = .byWordWrapping
+    private func apply(_ command: EditorFormatCommand, to textView: UITextView, context: Context) {
+        let selectedRange = textView.selectedRange
+        let targetRange = formatTargetRange(in: textView)
+        let mutableText = NSMutableAttributedString(attributedString: textView.attributedText ?? attributedString(for: textView.text))
+        let nextAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
+
+        if targetRange.length > 0 {
+            apply(command, to: mutableText, in: clampedRange(targetRange, in: textView.text))
+            textView.attributedText = mutableText
+            textView.selectedRange = clampedRange(selectedRange, in: textView.text)
+            text = mutableText.string
+        }
+
+        textView.typingAttributes = nextAttributes
+    }
+
+    private func apply(_ command: EditorFormatCommand, to text: NSMutableAttributedString, in range: NSRange) {
+        guard range.length > 0 else { return }
+
+        let runs = attributeRuns(in: text, range: range)
+
+        for run in runs {
+            var currentInlineStyles = run.inlineStyles
+            let nextBlockStyle: EditorBlockStyle
+
+            switch command.kind {
+            case .block(let blockStyle):
+                nextBlockStyle = blockStyle
+                if blockStyle.activatesBoldInlineStyle {
+                    currentInlineStyles.insert(.bold)
+                } else {
+                    currentInlineStyles.remove(.bold)
+                }
+            case .inline(let inlineStyle, let isActive):
+                nextBlockStyle = run.blockStyle
+                if isActive {
+                    currentInlineStyles.insert(inlineStyle)
+                } else {
+                    currentInlineStyles.remove(inlineStyle)
+                }
+            }
+
+            text.setAttributes(
+                attributes(blockStyle: nextBlockStyle, inlineStyles: currentInlineStyles),
+                range: run.range
+            )
+        }
+    }
+
+    private func attributeRuns(
+        in text: NSAttributedString,
+        range targetRange: NSRange
+    ) -> [(range: NSRange, blockStyle: EditorBlockStyle, inlineStyles: Set<EditorInlineStyle>)] {
+        var runs: [(NSRange, EditorBlockStyle, Set<EditorInlineStyle>)] = []
+
+        text.enumerateAttributes(in: targetRange, options: []) { attributes, effectiveRange, _ in
+            let affectedRange = NSIntersectionRange(effectiveRange, targetRange)
+            guard affectedRange.length > 0 else { return }
+
+            runs.append((affectedRange, blockStyle(from: attributes), inlineStyles(from: attributes)))
+        }
+
+        return runs
+    }
+
+    private func formatTargetRange(in textView: UITextView) -> NSRange {
+        let selectedRange = clampedRange(textView.selectedRange, in: textView.text)
+        let nsText = textView.text as NSString
+
+        if selectedRange.length > 0 {
+            if selectedRange.length >= nsText.length,
+               nsText.length > 0,
+               !textView.isFirstResponder {
+                return NSRange(location: 0, length: 0)
+            }
+
+            return selectedRange
+        }
+
+        guard nsText.length > 0 else {
+            return NSRange(location: selectedRange.location, length: 0)
+        }
+
+        if selectedRange.location == nsText.length,
+           nsText.substring(from: max(nsText.length - 1, 0)) == "\n" {
+            return NSRange(location: selectedRange.location, length: 0)
+        }
+
+        return visibleParagraphRange(
+            in: nsText,
+            at: min(selectedRange.location, nsText.length - 1)
+        )
+    }
+
+    private func visibleParagraphRange(in text: NSString, at location: Int) -> NSRange {
+        let paragraphRange = text.paragraphRange(for: NSRange(location: location, length: 0))
+        guard paragraphRange.length > 0 else { return paragraphRange }
+
+        let lastIndex = paragraphRange.location + paragraphRange.length - 1
+        let includesTrailingNewline = text.substring(with: NSRange(location: lastIndex, length: 1)) == "\n"
+        guard includesTrailingNewline else { return paragraphRange }
+
+        return NSRange(
+            location: paragraphRange.location,
+            length: max(paragraphRange.length - 1, 0)
+        )
+    }
+
+    private func attributes(
+        blockStyle: EditorBlockStyle,
+        inlineStyles: Set<EditorInlineStyle>
+    ) -> [NSAttributedString.Key: Any] {
+        let font = font(blockStyle: blockStyle, inlineStyles: inlineStyles)
+        let paragraphStyle = paragraphStyle(font: font)
 
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: textColor,
-            .paragraphStyle: paragraphStyle
+            .paragraphStyle: paragraphStyle,
+            .baselineOffset: Self.baselineOffset(for: font),
+            Self.blockStyleAttribute: blockStyle.rawValue,
+            Self.inlineStylesAttribute: inlineStyles.map(\.rawValue).sorted().joined(separator: ",")
         ]
 
-        if isUnderlined {
+        if inlineStyles.contains(.underline) {
             attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
 
-        if isStruckThrough {
+        if inlineStyles.contains(.strikethrough) {
             attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
         }
 
         return attributes
     }
 
-    private var textAttributesSignature: String {
-        [
-            font.fontName,
-            String(format: "%.2f", font.pointSize),
-            String(format: "%.2f", lineSpacing),
-            isUnderlined ? "underline" : "no-underline",
-            isStruckThrough ? "strike" : "no-strike"
-        ].joined(separator: "|")
+    private func paragraphStyle(font: UIFont) -> NSMutableParagraphStyle {
+        let lineHeight = Self.lineHeight(for: font)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.minimumLineHeight = lineHeight
+        paragraphStyle.maximumLineHeight = lineHeight
+        paragraphStyle.lineSpacing = 0
+        paragraphStyle.lineBreakMode = .byWordWrapping
+        paragraphStyle.paragraphSpacing = 0
+
+        return paragraphStyle
+    }
+
+    private static func lineHeight(for font: UIFont) -> CGFloat {
+        ceil(max(font.lineHeight, font.pointSize * lineHeightRatio) / 4) * 4
+    }
+
+    private static func baselineOffset(for font: UIFont) -> CGFloat {
+        (lineHeight(for: font) - font.lineHeight) / 2
+    }
+
+    private static func baselineOffset(from attributes: [NSAttributedString.Key: Any], font: UIFont) -> CGFloat {
+        if let offset = attributes[.baselineOffset] as? CGFloat {
+            return offset
+        }
+
+        if let offset = attributes[.baselineOffset] as? NSNumber {
+            return CGFloat(offset.doubleValue)
+        }
+
+        return baselineOffset(for: font)
+    }
+
+    private func font(blockStyle: EditorBlockStyle, inlineStyles: Set<EditorInlineStyle>) -> UIFont {
+        let weight = inlineStyles.contains(.bold) ? UIFont.Weight.bold : blockStyle.bodyFontWeight
+        let baseFont: UIFont
+
+        if blockStyle == .monospace {
+            baseFont = .monospacedSystemFont(ofSize: blockStyle.bodyFontSize, weight: weight)
+        } else {
+            baseFont = .systemFont(ofSize: blockStyle.bodyFontSize, weight: weight)
+        }
+
+        guard inlineStyles.contains(.italic),
+              let descriptor = baseFont.fontDescriptor.withSymbolicTraits(.traitItalic)
+        else {
+            return baseFont
+        }
+
+        return UIFont(descriptor: descriptor, size: blockStyle.bodyFontSize)
     }
 
     private func attributedString(for text: String) -> NSAttributedString {
-        NSAttributedString(string: text, attributes: textAttributes)
+        NSAttributedString(
+            string: text,
+            attributes: attributes(blockStyle: .body, inlineStyles: [])
+        )
+    }
+
+    private func blockStyle(from attributes: [NSAttributedString.Key: Any]) -> EditorBlockStyle {
+        guard let rawValue = attributes[Self.blockStyleAttribute] as? String,
+              let blockStyle = EditorBlockStyle(rawValue: rawValue)
+        else {
+            return .body
+        }
+
+        return blockStyle
+    }
+
+    private func inlineStyles(from attributes: [NSAttributedString.Key: Any]) -> Set<EditorInlineStyle> {
+        guard let rawValue = attributes[Self.inlineStylesAttribute] as? String,
+              !rawValue.isEmpty
+        else {
+            return []
+        }
+
+        return Set(rawValue.split(separator: ",").compactMap { EditorInlineStyle(rawValue: String($0)) })
     }
 
     private func clampedRange(_ range: NSRange, in text: String) -> NSRange {
@@ -1443,9 +1664,40 @@ struct MemoBodyTextView: UIViewRepresentable {
         }
     }
 
+    final class RichTextView: UITextView {
+        override func caretRect(for position: UITextPosition) -> CGRect {
+            var rect = super.caretRect(for: position)
+            let activeFont = typingAttributes[.font] as? UIFont
+                ?? font
+                ?? UIFont.systemFont(ofSize: EditorBlockStyle.body.bodyFontSize)
+            let caretHeight = activeFont.lineHeight
+
+            if let textRange = textRange(from: beginningOfDocument, to: position) {
+                let characterIndex = offset(from: beginningOfDocument, to: textRange.end)
+                let storageLength = textStorage.length
+
+                if storageLength > 0 {
+                    layoutManager.ensureLayout(for: textContainer)
+
+                    let boundedCharacterIndex = min(max(characterIndex, 0), storageLength - 1)
+                    let glyphIndex = layoutManager.glyphIndexForCharacter(at: boundedCharacterIndex)
+                    let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+                    rect.origin.y = textContainerInset.top + lineRect.midY - caretHeight / 2
+                } else {
+                    rect.origin.y = rect.midY - caretHeight / 2
+                }
+            } else {
+                rect.origin.y = rect.midY - caretHeight / 2
+            }
+
+            rect.size.height = caretHeight
+            return rect
+        }
+    }
+
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: MemoBodyTextView
-        var textAttributesSignature = ""
+        var appliedFormatCommandID: UUID?
 
         init(_ parent: MemoBodyTextView) {
             self.parent = parent
@@ -1454,6 +1706,41 @@ struct MemoBodyTextView: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             parent.updateHeight(for: textView)
+            syncSelectionStyle(from: textView)
         }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            syncSelectionStyle(from: textView)
+        }
+
+        func syncSelectionStyle(from textView: UITextView) {
+            guard let attributedText = textView.attributedText,
+                  attributedText.length > 0
+            else {
+                parent.selectedBlockStyle = .body
+                parent.activeInlineStyles = []
+                textView.typingAttributes = parent.attributes(blockStyle: .body, inlineStyles: [])
+                textView.font = parent.font(blockStyle: .body, inlineStyles: [])
+                return
+            }
+
+            let selectedRange = textView.selectedRange
+            let index = min(max(selectedRange.location - (selectedRange.location == attributedText.length ? 1 : 0), 0), attributedText.length - 1)
+            let attributes = attributedText.attributes(at: index, effectiveRange: nil)
+            let blockStyle = parent.blockStyle(from: attributes)
+            let inlineStyles = parent.inlineStyles(from: attributes)
+
+            if parent.selectedBlockStyle != blockStyle {
+                parent.selectedBlockStyle = blockStyle
+            }
+
+            if parent.activeInlineStyles != inlineStyles {
+                parent.activeInlineStyles = inlineStyles
+            }
+
+            textView.typingAttributes = parent.attributes(blockStyle: blockStyle, inlineStyles: inlineStyles)
+            textView.font = parent.font(blockStyle: blockStyle, inlineStyles: inlineStyles)
+        }
+
     }
 }

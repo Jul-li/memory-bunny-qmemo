@@ -16,6 +16,7 @@ struct MemoEditorView: View {
 
     @State private var title: String
     @State private var content: String
+    @State private var richContentData: Data?
     @State private var isPinned: Bool
     @State private var isCustomNavigationVisible = false
     @State private var bodyTextHeight: CGFloat = 520
@@ -29,9 +30,16 @@ struct MemoEditorView: View {
     @State private var selectedStickerID: UUID?
     @State private var stickerDeletePromptID: UUID?
     @State private var shouldSkipPersistOnDisappear = false
+    @State private var savedDraftMemoID: UUID?
+    @State private var isSaveConfirmationVisible = false
+    @State private var isBodyTextFocused = false
+    @State private var editorContentFlushRequestID: UUID?
+    @State private var editorContentFlushedRequestID: UUID?
+    @State private var pendingConfirmedSaveID: UUID?
     @State private var selectedBlockStyle: EditorBlockStyle = .body
     @State private var activeInlineStyles: Set<EditorInlineStyle> = []
     @State private var pendingFormatCommand: EditorFormatCommand?
+    @FocusState private var isTitleFocused: Bool
     private let editorLineSpacing: CGFloat = 32
     private let editorBodyLineSpacing: CGFloat = 8
     private var canUndoInput: Bool {
@@ -76,6 +84,7 @@ struct MemoEditorView: View {
         self.navigationChrome = navigationChrome
         _title = State(initialValue: memo?.title ?? "")
         _content = State(initialValue: memo?.content ?? "")
+        _richContentData = State(initialValue: memo?.richContentData)
         _isPinned = State(initialValue: memo?.isPinned ?? false)
         _undoStack = State(initialValue: [])
         _placedStickers = State(initialValue: memo?.stickers.map(PlacedEditorSticker.init) ?? [])
@@ -92,6 +101,7 @@ struct MemoEditorView: View {
                         .font(.system(size: 24, weight: .black))
                         .foregroundStyle(Theme.Colors.text)
                         .textInputAutocapitalization(.never)
+                        .focused($isTitleFocused)
                         .frame(maxWidth: .infinity, minHeight: editorLineSpacing, alignment: .leading)
                         .padding(.top, 0)
 
@@ -158,6 +168,12 @@ struct MemoEditorView: View {
                 }
             }
 
+            if isSaveConfirmationVisible {
+                ToolbarItem(placement: .confirmationAction) {
+                    saveConfirmationButton
+                }
+            }
+
             if shouldShowMoreButton {
                 ToolbarItem(placement: .confirmationAction) {
                     editorMoreMenu
@@ -181,9 +197,31 @@ struct MemoEditorView: View {
         }
         .onChange(of: title) { oldValue, _ in
             recordUndoSnapshot(title: oldValue, content: content)
+            showSaveConfirmation()
         }
         .onChange(of: content) { oldValue, _ in
             recordUndoSnapshot(title: title, content: oldValue)
+            showSaveConfirmation()
+        }
+        .onChange(of: richContentData) {
+            showSaveConfirmation()
+        }
+        .onChange(of: isPinned) {
+            showSaveConfirmation()
+            persistExistingMemoIfNeeded()
+        }
+        .onChange(of: placedStickers) {
+            showSaveConfirmation()
+            persistExistingMemoIfNeeded()
+        }
+        .onChange(of: isTitleFocused) { _, isFocused in
+            updateSaveConfirmationVisibility(isFocused)
+        }
+        .onChange(of: isBodyTextFocused) { _, isFocused in
+            updateSaveConfirmationVisibility(isFocused)
+        }
+        .onChange(of: editorContentFlushedRequestID) { _, flushedRequestID in
+            completeConfirmedSaveIfNeeded(flushedRequestID)
         }
     }
 
@@ -236,11 +274,36 @@ struct MemoEditorView: View {
                     .transition(.scale(scale: 0.86).combined(with: .opacity))
                 }
 
+                if isSaveConfirmationVisible {
+                    Button {
+                        confirmSave()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 18, weight: .black))
+                            .foregroundStyle(Theme.Colors.text)
+                            .frame(width: 44, height: 44)
+                            .background(
+                                QMemoGlassBackground(
+                                    shape: Circle(),
+                                    tintOpacity: 0.20,
+                                    fallbackFillOpacity: 0.84,
+                                    strokeOpacity: 0.70,
+                                    lineOpacity: 0.10
+                                )
+                            )
+                            .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 10, y: 4)
+                    }
+                    .accessibilityLabel("确认保存")
+                    .buttonStyle(.plain)
+                    .transition(.scale(scale: 0.86).combined(with: .opacity))
+                }
+
                 if shouldShowMoreButton {
                     editorMoreMenu
                 }
             }
             .animation(.spring(response: 0.24, dampingFraction: 0.86), value: isUndoControlVisible)
+            .animation(.spring(response: 0.24, dampingFraction: 0.86), value: isSaveConfirmationVisible)
             .padding(.horizontal, 20)
             .padding(.top, 10)
             .padding(.bottom, 10)
@@ -263,6 +326,15 @@ struct MemoEditorView: View {
             }
         )
         .frame(width: 44, height: 44)
+    }
+
+    private var saveConfirmationButton: some View {
+        Button {
+            confirmSave()
+        } label: {
+            Image(systemName: "checkmark")
+        }
+        .accessibilityLabel("确认保存")
     }
 
     private var navigationGradient: some View {
@@ -350,9 +422,13 @@ struct MemoEditorView: View {
         MemoBodyTextView(
             text: $content,
             calculatedHeight: $bodyTextHeight,
+            richContentData: $richContentData,
+            isFocused: $isBodyTextFocused,
+            flushedRequestID: $editorContentFlushedRequestID,
             selectedBlockStyle: $selectedBlockStyle,
             activeInlineStyles: $activeInlineStyles,
             pendingFormatCommand: $pendingFormatCommand,
+            flushRequestID: editorContentFlushRequestID,
             textColor: UIColor(Theme.Colors.text),
             lineSpacing: editorBodyLineSpacing,
             exclusionPaths: stickerExclusionPaths
@@ -591,43 +667,124 @@ struct MemoEditorView: View {
         guard !shouldSkipPersistOnDisappear else { return }
         guard memo != nil || hasEditableDraftContent else { return }
 
+        if editableStoredMemo() != nil {
+            persistExistingMemoIfNeeded()
+            return
+        }
+
+        createDraftMemoIfNeeded()
+    }
+
+    private func createDraftMemoIfNeeded() {
+        guard memo == nil, hasEditableDraftContent else { return }
+
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let storedTitle = cleanTitle.isEmpty ? "未命名便签" : cleanTitle
+        let storedContent = storedContentText(fallback: cleanContent)
         let storedStickers = placedStickers.map(\.memoSticker)
 
-        if let memo {
-            guard
-                storedTitle != memo.title
-                    || cleanContent != memo.content
-                    || isPinned != memo.isPinned
-                    || storedStickers != memo.stickers
-            else {
-                return
-            }
+        let createdMemo = store.create(
+            title: storedTitle,
+            content: storedContent,
+            richContentData: richContentData,
+            category: category,
+            isPinned: isPinned,
+            stickers: storedStickers
+        )
+        savedDraftMemoID = createdMemo.id
+    }
 
-            store.update(
-                memo,
-                title: storedTitle,
-                content: cleanContent,
-                isPinned: isPinned,
-                stickers: storedStickers
-            )
-        } else {
-            store.create(
-                title: storedTitle,
-                content: cleanContent,
-                category: category,
-                isPinned: isPinned,
-                stickers: storedStickers
-            )
+    private func persistExistingMemoIfNeeded() {
+        guard !shouldSkipPersistOnDisappear, let storedMemo = editableStoredMemo() else { return }
+
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedTitle = cleanTitle.isEmpty ? "未命名便签" : cleanTitle
+        let storedContent = storedContentText(fallback: cleanContent)
+        let storedStickers = placedStickers.map(\.memoSticker)
+
+        guard
+            storedTitle != storedMemo.title
+                || storedContent != storedMemo.content
+                || richContentData != storedMemo.richContentData
+                || isPinned != storedMemo.isPinned
+                || storedStickers != storedMemo.stickers
+        else {
+            return
+        }
+
+        store.update(
+            storedMemo,
+            title: storedTitle,
+            content: storedContent,
+            richContentData: richContentData,
+            isPinned: isPinned,
+            stickers: storedStickers
+        )
+    }
+
+    private func storedContentText(fallback cleanContent: String) -> String {
+        guard let richContentData,
+              let storedString = try? NSKeyedUnarchiver.unarchivedObject(
+                ofClass: NSAttributedString.self,
+                from: richContentData
+              )
+        else {
+            return cleanContent
+        }
+
+        return storedString.string
+    }
+
+    private func editableStoredMemo() -> Memo? {
+        if let memo {
+            return store.memos.first { $0.id == memo.id } ?? memo
+        }
+
+        guard let savedDraftMemoID else { return nil }
+        return store.memos.first { $0.id == savedDraftMemoID }
+    }
+
+    private func confirmSave() {
+        let requestID = UUID()
+        pendingConfirmedSaveID = requestID
+        editorContentFlushRequestID = requestID
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func completeConfirmedSaveIfNeeded(_ flushedRequestID: UUID?) {
+        guard let flushedRequestID, pendingConfirmedSaveID == flushedRequestID else { return }
+
+        persistDraftIfNeeded()
+        pendingConfirmedSaveID = nil
+        withAnimation(.spring(response: 0.20, dampingFraction: 0.88)) {
+            isSaveConfirmationVisible = false
+        }
+    }
+
+    private func showSaveConfirmation() {
+        guard !isSaveConfirmationVisible else { return }
+
+        withAnimation(.spring(response: 0.20, dampingFraction: 0.88)) {
+            isSaveConfirmationVisible = true
+        }
+    }
+
+    private func updateSaveConfirmationVisibility(_ isFocused: Bool) {
+        if isFocused {
+            showSaveConfirmation()
+        } else if !isTitleFocused && !isBodyTextFocused {
+            withAnimation(.spring(response: 0.20, dampingFraction: 0.88)) {
+                isSaveConfirmationVisible = false
+            }
         }
     }
 
     private func deleteOrDiscardDraft() {
         shouldSkipPersistOnDisappear = true
-        if let memo {
-            store.delete(memo)
+        if let storedMemo = editableStoredMemo() {
+            store.delete(storedMemo)
         }
         dismiss()
     }
@@ -1016,6 +1173,20 @@ private struct EditorFormatCommand: Equatable {
     let id = UUID()
     let kind: Kind
 
+    var blockStyle: EditorBlockStyle? {
+        if case .block(let blockStyle) = kind {
+            return blockStyle
+        }
+
+        return nil
+    }
+
+    func isCollapsedBlockStyleCommand(selectedRange: NSRange) -> Bool {
+        guard selectedRange.length == 0 else { return false }
+
+        return blockStyle != nil
+    }
+
     enum Kind: Equatable {
         case block(EditorBlockStyle)
         case inline(EditorInlineStyle, isActive: Bool)
@@ -1350,10 +1521,14 @@ private struct EditorMoreMenuButton: UIViewRepresentable {
 private struct MemoBodyTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var calculatedHeight: CGFloat
+    @Binding var richContentData: Data?
+    @Binding var isFocused: Bool
+    @Binding var flushedRequestID: UUID?
     @Binding var selectedBlockStyle: EditorBlockStyle
     @Binding var activeInlineStyles: Set<EditorInlineStyle>
     @Binding var pendingFormatCommand: EditorFormatCommand?
 
+    let flushRequestID: UUID?
     let textColor: UIColor
     let lineSpacing: CGFloat
     let exclusionPaths: [UIBezierPath]
@@ -1361,6 +1536,12 @@ private struct MemoBodyTextView: UIViewRepresentable {
     private static let blockStyleAttribute = NSAttributedString.Key("QMemoBlockStyle")
     private static let inlineStylesAttribute = NSAttributedString.Key("QMemoInlineStyles")
     private static let lineHeightRatio: CGFloat = 1.25
+    private static let monospaceInputHorizontalPadding: CGFloat = 8
+    private static let monospaceInputVerticalPadding: CGFloat = 8
+    private static let monospaceAdjacentTextGap: CGFloat = 4
+    private static let monospaceBoundarySpacing = monospaceInputVerticalPadding + monospaceAdjacentTextGap
+    private static let monospaceLineMergeGap: CGFloat = 9
+    private static let monospaceInputCornerRadius: CGFloat = 8
 
     func makeUIView(context: Context) -> RichTextView {
         let textView = RichTextView()
@@ -1377,8 +1558,9 @@ private struct MemoBodyTextView: UIViewRepresentable {
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
         textView.textContainer.exclusionPaths = boundedExclusionPaths(for: textView)
-        textView.attributedText = attributedString(for: text)
+        textView.attributedText = storedAttributedString(for: text)
         textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
+        textView.refreshMonospaceBackgrounds()
         return textView
     }
 
@@ -1390,11 +1572,12 @@ private struct MemoBodyTextView: UIViewRepresentable {
 
         defer {
             updateHeight(for: textView)
+            textView.refreshMonospaceBackgrounds()
         }
 
         if textView.text != text {
             let selectedRange = textView.selectedRange
-            textView.attributedText = attributedString(for: text)
+            textView.attributedText = storedAttributedString(for: text)
             textView.selectedRange = clampedRange(selectedRange, in: text)
         }
 
@@ -1405,6 +1588,12 @@ private struct MemoBodyTextView: UIViewRepresentable {
         } else {
             textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
         }
+
+        if let flushRequestID,
+           context.coordinator.handledFlushRequestID != flushRequestID {
+            context.coordinator.handledFlushRequestID = flushRequestID
+            flushContent(from: textView, requestID: flushRequestID)
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -1413,18 +1602,29 @@ private struct MemoBodyTextView: UIViewRepresentable {
 
     private func apply(_ command: EditorFormatCommand, to textView: UITextView, context: Context) {
         let selectedRange = textView.selectedRange
-        let targetRange = formatTargetRange(in: textView)
+        let targetRange = formatTargetRange(in: textView, command: command)
         let mutableText = NSMutableAttributedString(attributedString: textView.attributedText ?? attributedString(for: textView.text))
         let nextAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
 
         if targetRange.length > 0 {
             apply(command, to: mutableText, in: clampedRange(targetRange, in: textView.text))
+            normalizeMonospaceParagraphSpacing(in: mutableText)
             textView.attributedText = mutableText
             textView.selectedRange = clampedRange(selectedRange, in: textView.text)
             text = mutableText.string
+            richContentData = archivedData(for: mutableText)
         }
 
         textView.typingAttributes = nextAttributes
+        if case .block = command.kind, selectedRange.length == 0 {
+            context.coordinator.explicitTypingLocation = selectedRange.location
+            context.coordinator.explicitTypingAttributes = nextAttributes
+        } else {
+            context.coordinator.explicitTypingLocation = nil
+            context.coordinator.explicitTypingAttributes = nil
+        }
+        updateHeight(for: textView)
+        (textView as? RichTextView)?.refreshMonospaceBackgrounds()
     }
 
     private func apply(_ command: EditorFormatCommand, to text: NSMutableAttributedString, in range: NSRange) {
@@ -1476,9 +1676,10 @@ private struct MemoBodyTextView: UIViewRepresentable {
         return runs
     }
 
-    private func formatTargetRange(in textView: UITextView) -> NSRange {
+    private func formatTargetRange(in textView: UITextView, command: EditorFormatCommand) -> NSRange {
         let selectedRange = clampedRange(textView.selectedRange, in: textView.text)
         let nsText = textView.text as NSString
+        let includesParagraphBoundary = command.isCollapsedBlockStyleCommand(selectedRange: selectedRange)
 
         if selectedRange.length > 0 {
             if selectedRange.length >= nsText.length,
@@ -1494,20 +1695,40 @@ private struct MemoBodyTextView: UIViewRepresentable {
             return NSRange(location: selectedRange.location, length: 0)
         }
 
+        if includesParagraphBoundary,
+           currentLineIsEmpty(in: nsText, at: selectedRange.location) {
+            return emptyLineStyleRange(
+                in: textView,
+                text: nsText,
+                at: selectedRange.location,
+                applying: command.blockStyle
+            )
+        }
+
         if selectedRange.location == nsText.length,
            nsText.substring(from: max(nsText.length - 1, 0)) == "\n" {
+            if includesParagraphBoundary {
+                return NSRange(location: max(nsText.length - 1, 0), length: 1)
+            }
+
             return NSRange(location: selectedRange.location, length: 0)
         }
 
         return visibleParagraphRange(
             in: nsText,
-            at: min(selectedRange.location, nsText.length - 1)
+            at: min(selectedRange.location, nsText.length - 1),
+            includesParagraphBoundary: includesParagraphBoundary
         )
     }
 
-    private func visibleParagraphRange(in text: NSString, at location: Int) -> NSRange {
+    private func visibleParagraphRange(
+        in text: NSString,
+        at location: Int,
+        includesParagraphBoundary: Bool
+    ) -> NSRange {
         let paragraphRange = text.paragraphRange(for: NSRange(location: location, length: 0))
         guard paragraphRange.length > 0 else { return paragraphRange }
+        guard !includesParagraphBoundary else { return paragraphRange }
 
         let lastIndex = paragraphRange.location + paragraphRange.length - 1
         let includesTrailingNewline = text.substring(with: NSRange(location: lastIndex, length: 1)) == "\n"
@@ -1519,12 +1740,79 @@ private struct MemoBodyTextView: UIViewRepresentable {
         )
     }
 
+    private func currentLineIsEmpty(in text: NSString, at location: Int) -> Bool {
+        guard text.length > 0 else { return true }
+
+        if location == text.length,
+           isNewline(in: text, at: location - 1) {
+            return true
+        }
+
+        let paragraphRange = text.paragraphRange(
+            for: NSRange(location: min(max(location, 0), text.length - 1), length: 0)
+        )
+        return visibleLength(in: text, range: paragraphRange) == 0
+    }
+
+    private func emptyLineStyleRange(
+        in textView: UITextView,
+        text: NSString,
+        at location: Int,
+        applying blockStyle: EditorBlockStyle?
+    ) -> NSRange {
+        if location == text.length,
+           isNewline(in: text, at: location - 1) {
+            if blockStyle != .monospace,
+               characterBlockStyle(in: textView.attributedText, at: location - 1) == .monospace {
+                return NSRange(location: location - 1, length: 1)
+            }
+
+            return NSRange(location: location, length: 0)
+        }
+
+        let paragraphRange = text.paragraphRange(
+            for: NSRange(location: min(max(location, 0), text.length - 1), length: 0)
+        )
+        return visibleLength(in: text, range: paragraphRange) == 0
+            ? paragraphRange
+            : NSRange(location: location, length: 0)
+    }
+
+    private func characterBlockStyle(in attributedText: NSAttributedString?, at index: Int) -> EditorBlockStyle {
+        guard let attributedText,
+              index >= 0,
+              index < attributedText.length
+        else {
+            return .body
+        }
+
+        return blockStyle(from: attributedText.attributes(at: index, effectiveRange: nil))
+    }
+
+    private func visibleLength(in text: NSString, range: NSRange) -> Int {
+        guard range.length > 0 else { return 0 }
+
+        var visibleLength = range.length
+        var index = range.location + range.length - 1
+        while visibleLength > 0, isNewline(in: text, at: index) {
+            visibleLength -= 1
+            index -= 1
+        }
+
+        return visibleLength
+    }
+
+    private func isNewline(in text: NSString, at index: Int) -> Bool {
+        guard index >= 0, index < text.length else { return false }
+        return text.substring(with: NSRange(location: index, length: 1)) == "\n"
+    }
+
     private func attributes(
         blockStyle: EditorBlockStyle,
         inlineStyles: Set<EditorInlineStyle>
     ) -> [NSAttributedString.Key: Any] {
         let font = font(blockStyle: blockStyle, inlineStyles: inlineStyles)
-        let paragraphStyle = paragraphStyle(font: font)
+        let paragraphStyle = paragraphStyle(blockStyle: blockStyle, font: font)
 
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
@@ -1546,7 +1834,7 @@ private struct MemoBodyTextView: UIViewRepresentable {
         return attributes
     }
 
-    private func paragraphStyle(font: UIFont) -> NSMutableParagraphStyle {
+    private func paragraphStyle(blockStyle: EditorBlockStyle, font: UIFont) -> NSMutableParagraphStyle {
         let lineHeight = Self.lineHeight(for: font)
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.minimumLineHeight = lineHeight
@@ -1554,8 +1842,79 @@ private struct MemoBodyTextView: UIViewRepresentable {
         paragraphStyle.lineSpacing = 0
         paragraphStyle.lineBreakMode = .byWordWrapping
         paragraphStyle.paragraphSpacing = 0
+        if blockStyle == .monospace {
+            paragraphStyle.firstLineHeadIndent = Self.monospaceInputHorizontalPadding
+            paragraphStyle.headIndent = Self.monospaceInputHorizontalPadding
+            paragraphStyle.tailIndent = -Self.monospaceInputHorizontalPadding
+        }
 
         return paragraphStyle
+    }
+
+    private func normalizeMonospaceParagraphSpacing(in attributedText: NSMutableAttributedString) {
+        let text = attributedText.string as NSString
+        guard text.length > 0 else { return }
+
+        let paragraphs = paragraphDescriptors(in: attributedText, text: text)
+        for (index, paragraph) in paragraphs.enumerated() where paragraph.blockStyle == .monospace {
+            let previousBlockStyle = index > 0 ? paragraphs[index - 1].blockStyle : nil
+            let nextBlockStyle = index < paragraphs.count - 1 ? paragraphs[index + 1].blockStyle : nil
+            let attributes = attributedText.attributes(at: paragraph.attributeIndex, effectiveRange: nil)
+            let inlineStyles = inlineStyles(from: attributes)
+            let font = attributes[.font] as? UIFont ?? font(blockStyle: paragraph.blockStyle, inlineStyles: inlineStyles)
+            let paragraphStyle = paragraphStyle(blockStyle: paragraph.blockStyle, font: font)
+
+            if let previousBlockStyle, previousBlockStyle != .monospace {
+                paragraphStyle.paragraphSpacingBefore = Self.monospaceBoundarySpacing
+            }
+
+            if let nextBlockStyle, nextBlockStyle != .monospace {
+                paragraphStyle.paragraphSpacing = Self.monospaceBoundarySpacing
+            }
+
+            attributedText.addAttribute(.paragraphStyle, value: paragraphStyle, range: paragraph.range)
+        }
+    }
+
+    private func normalizedAttributedString(_ attributedText: NSAttributedString) -> NSAttributedString {
+        let mutableText = NSMutableAttributedString(attributedString: attributedText)
+        normalizeMonospaceParagraphSpacing(in: mutableText)
+        return mutableText
+    }
+
+    private func paragraphDescriptors(
+        in attributedText: NSAttributedString,
+        text: NSString
+    ) -> [(range: NSRange, attributeIndex: Int, blockStyle: EditorBlockStyle)] {
+        var descriptors: [(NSRange, Int, EditorBlockStyle)] = []
+        var location = 0
+
+        while location < text.length {
+            let paragraphRange = text.paragraphRange(for: NSRange(location: location, length: 0))
+            let attributeIndex = paragraphAttributeIndex(in: text, paragraphRange: paragraphRange)
+            let blockStyle = blockStyle(from: attributedText.attributes(at: attributeIndex, effectiveRange: nil))
+            descriptors.append((paragraphRange, attributeIndex, blockStyle))
+
+            let nextLocation = NSMaxRange(paragraphRange)
+            guard nextLocation > location else { break }
+            location = nextLocation
+        }
+
+        return descriptors
+    }
+
+    private func paragraphAttributeIndex(in text: NSString, paragraphRange: NSRange) -> Int {
+        let end = NSMaxRange(paragraphRange)
+        var index = paragraphRange.location
+
+        while index < end {
+            if !isNewline(in: text, at: index) {
+                return index
+            }
+            index += 1
+        }
+
+        return min(max(paragraphRange.location, 0), max(text.length - 1, 0))
     }
 
     private static func lineHeight(for font: UIFont) -> CGFloat {
@@ -1602,6 +1961,51 @@ private struct MemoBodyTextView: UIViewRepresentable {
             string: text,
             attributes: attributes(blockStyle: .body, inlineStyles: [])
         )
+    }
+
+    private func storedAttributedString(for text: String) -> NSAttributedString {
+        guard let richContentData,
+              let storedString = try? NSKeyedUnarchiver.unarchivedObject(
+                ofClass: NSAttributedString.self,
+                from: richContentData
+              )
+        else {
+            return attributedString(for: text)
+        }
+
+        if storedString.string == text
+            || storedString.string.trimmingCharacters(in: .whitespacesAndNewlines) == text {
+            return normalizedAttributedString(storedString)
+        } else {
+            return attributedString(for: text)
+        }
+    }
+
+    private func archivedData(for attributedText: NSAttributedString?) -> Data? {
+        guard let attributedText else { return nil }
+
+        return try? NSKeyedArchiver.archivedData(
+            withRootObject: attributedText,
+            requiringSecureCoding: true
+        )
+    }
+
+    private func syncContent(from textView: UITextView) {
+        normalizeMonospaceParagraphSpacing(in: textView.textStorage)
+        text = textView.text ?? ""
+        richContentData = archivedData(for: textView.attributedText)
+    }
+
+    private func flushContent(from textView: UITextView, requestID: UUID) {
+        normalizeMonospaceParagraphSpacing(in: textView.textStorage)
+        let currentText = textView.text ?? ""
+        let currentRichContentData = archivedData(for: textView.attributedText)
+
+        DispatchQueue.main.async {
+            text = currentText
+            richContentData = currentRichContentData
+            flushedRequestID = requestID
+        }
     }
 
     private func blockStyle(from attributes: [NSAttributedString.Key: Any]) -> EditorBlockStyle {
@@ -1665,27 +2069,445 @@ private struct MemoBodyTextView: UIViewRepresentable {
     }
 
     final class RichTextView: UITextView {
+        private let monospaceBackgroundLayer = CAShapeLayer()
+
+        override init(frame: CGRect, textContainer: NSTextContainer?) {
+            super.init(frame: frame, textContainer: textContainer)
+            configureMonospaceBackgroundLayer()
+        }
+
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+            configureMonospaceBackgroundLayer()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            refreshMonospaceBackgrounds()
+        }
+
+        override var keyCommands: [UIKeyCommand]? {
+            guard isCurrentCaretMonospace else {
+                return super.keyCommands
+            }
+
+            var commands = super.keyCommands ?? []
+            commands.append(Self.monospaceArrowCommand(input: UIKeyCommand.inputUpArrow))
+            commands.append(Self.monospaceArrowCommand(input: UIKeyCommand.inputDownArrow))
+            return commands
+        }
+
+        private static func monospaceArrowCommand(input: String) -> UIKeyCommand {
+            let command = UIKeyCommand(
+                input: input,
+                modifierFlags: [],
+                action: #selector(ignoreMonospaceVerticalArrowKey(_:))
+            )
+            command.wantsPriorityOverSystemBehavior = true
+            return command
+        }
+
+        @objc private func ignoreMonospaceVerticalArrowKey(_ sender: UIKeyCommand) {
+            refreshMonospaceBackgrounds()
+        }
+
+        private func configureMonospaceBackgroundLayer() {
+            monospaceBackgroundLayer.fillColor = UIColor(
+                red: 0x49 / 255,
+                green: 0x39 / 255,
+                blue: 0x2F / 255,
+                alpha: 0.08
+            ).cgColor
+            monospaceBackgroundLayer.actions = [
+                "path": NSNull(),
+                "position": NSNull(),
+                "bounds": NSNull()
+            ]
+            layer.insertSublayer(monospaceBackgroundLayer, at: 0)
+        }
+
+        func refreshMonospaceBackgrounds() {
+            layoutManager.ensureLayout(for: textContainer)
+            monospaceBackgroundLayer.frame = bounds
+
+            let path = UIBezierPath()
+            monospaceParagraphRects().forEach { rect in
+                path.append(
+                    UIBezierPath(
+                        roundedRect: rect,
+                        cornerRadius: MemoBodyTextView.monospaceInputCornerRadius
+                    )
+                )
+            }
+
+            monospaceBackgroundLayer.path = path.cgPath
+        }
+
+        private func monospaceParagraphRects() -> [CGRect] {
+            var lineRects = monospaceLineRects()
+
+            if isTypingMonospace,
+               let activeBlockRect = activeMonospaceBlockRect(),
+               !lineRects.contains(where: { $0.contains(activeBlockRect) }) {
+                lineRects.append(activeBlockRect)
+            }
+
+            return mergedLineRects(lineRects).map(paddedInputRect(from:))
+        }
+
+        private var isTypingMonospace: Bool {
+            typingAttributes[MemoBodyTextView.blockStyleAttribute] as? String == EditorBlockStyle.monospace.rawValue
+        }
+
+        private var isCurrentCaretMonospace: Bool {
+            guard let selectedPosition = selectedTextRange?.start else { return false }
+            return isActiveMonospaceCaret(at: selectedPosition)
+        }
+
+        private func monospaceLineRects() -> [CGRect] {
+            let storageLength = textStorage.length
+            guard storageLength > 0 else { return [] }
+
+            let fullCharacterRange = NSRange(location: 0, length: storageLength)
+            layoutManager.ensureLayout(forCharacterRange: fullCharacterRange)
+
+            var lineRects: [CGRect] = []
+            let glyphRange = layoutManager.glyphRange(
+                forCharacterRange: fullCharacterRange,
+                actualCharacterRange: nil
+            )
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { lineRect, _, _, glyphRange, _ in
+                let characterRange = self.layoutManager.characterRange(
+                    forGlyphRange: glyphRange,
+                    actualGlyphRange: nil
+                )
+
+                guard self.isMonospaceLine(characterRange: characterRange) else { return }
+                lineRects.append(lineRect)
+            }
+
+            return lineRects
+        }
+
+        private func activeMonospaceBlockRect() -> CGRect? {
+            guard isTypingMonospace,
+                  let selectedPosition = selectedTextRange?.start,
+                  let textRange = textRange(from: beginningOfDocument, to: selectedPosition)
+            else {
+                return nil
+            }
+
+            let caretCharacterIndex = offset(from: beginningOfDocument, to: textRange.end)
+            let nsText = textStorage.string as NSString
+            guard caretCharacterIndex <= nsText.length else { return nil }
+
+            return monospaceBlockRect(
+                endingAt: caretCharacterIndex,
+                in: nsText,
+                activeLineRect: activeMonospaceLineRect()
+            )
+        }
+
+        private func monospaceBlockRect(
+            endingAt location: Int,
+            in nsText: NSString,
+            activeLineRect: CGRect?
+        ) -> CGRect? {
+            let blockRange = activeMonospaceBlockRange(endingAt: location, in: nsText)
+            let lineCount = max(
+                monospaceBlockLineCount(
+                    in: nsText,
+                    range: blockRange,
+                    includesTrailingInsertionLine: activeLineRect != nil
+                        && blockRange.length > 0
+                        && isNewline(at: NSMaxRange(blockRange) - 1, in: nsText)
+                ),
+                1
+            )
+            let firstLineRect = firstMonospaceLineRect(in: blockRange, text: nsText) ?? activeLineRect
+            guard let firstLineRect else { return nil }
+
+            let fallbackFont = typingAttributes[.font] as? UIFont
+                ?? UIFont.monospacedSystemFont(
+                    ofSize: EditorBlockStyle.monospace.bodyFontSize,
+                    weight: EditorBlockStyle.monospace.bodyFontWeight
+            )
+            let fallbackLineHeight = MemoBodyTextView.lineHeight(for: fallbackFont)
+            let lineHeight = max(firstLineRect.height, activeLineRect?.height ?? 0, fallbackLineHeight)
+
+            return CGRect(
+                x: firstLineRect.minX,
+                y: firstLineRect.minY,
+                width: max(firstLineRect.width, activeLineRect?.width ?? 0, textContainer.size.width),
+                height: max(CGFloat(lineCount) * lineHeight, lineHeight)
+            )
+        }
+
+        private func firstMonospaceLineRect(in blockRange: NSRange, text: NSString) -> CGRect? {
+            guard blockRange.length > 0 else { return nil }
+
+            let storageLength = textStorage.length
+            guard storageLength > 0 else { return nil }
+
+            if isNewline(at: blockRange.location, in: text),
+               let leadingEmptyLineRect = lineRectForInsertionPoint(afterCharacterAt: blockRange.location) {
+                return leadingEmptyLineRect
+            }
+
+            let characterIndex = min(max(blockRange.location, 0), storageLength - 1)
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: characterIndex)
+            return layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+        }
+
+        private func lineRectForInsertionPoint(afterCharacterAt characterIndex: Int) -> CGRect? {
+            guard let position = position(
+                from: beginningOfDocument,
+                offset: min(max(characterIndex + 1, 0), textStorage.length)
+            ) else {
+                return nil
+            }
+
+            return textContainerRect(from: super.caretRect(for: position))
+        }
+
+        private func monospaceBlockLineCount(
+            in text: NSString,
+            range: NSRange,
+            includesTrailingInsertionLine: Bool = false
+        ) -> Int {
+            guard range.length > 0 else { return 1 }
+
+            var newlineCount = 0
+            let end = NSMaxRange(range)
+            var index = range.location
+            while index < end {
+                if text.substring(with: NSRange(location: index, length: 1)) == "\n" {
+                    newlineCount += 1
+                }
+                index += 1
+            }
+
+            let endsWithNewline = isNewline(at: end - 1, in: text)
+            let representedLineCount = newlineCount + (endsWithNewline ? 0 : 1)
+            return max(representedLineCount + (includesTrailingInsertionLine ? 1 : 0), 1)
+        }
+
+        private func activeMonospaceBlockRange(endingAt location: Int, in text: NSString) -> NSRange {
+            let storageLength = textStorage.length
+            guard storageLength > 0 else { return NSRange(location: 0, length: 0) }
+
+            let blockEnd = min(max(location, 0), storageLength)
+            var contentEnd = blockEnd
+            var hasStyledTrailingNewline = false
+
+            while contentEnd > 0, isNewline(at: contentEnd - 1, in: text) {
+                if isMonospaceCharacter(at: contentEnd - 1) {
+                    hasStyledTrailingNewline = true
+                }
+                contentEnd -= 1
+            }
+
+            var contentStart = contentEnd
+            while contentStart > 0, isMonospaceCharacter(at: contentStart - 1) {
+                contentStart -= 1
+            }
+
+            if contentStart < contentEnd {
+                return NSRange(
+                    location: contentStart,
+                    length: max(blockEnd - contentStart, 0)
+                )
+            }
+
+            if hasStyledTrailingNewline {
+                return NSRange(
+                    location: contentEnd,
+                    length: max(blockEnd - contentEnd, 0)
+                )
+            }
+
+            return NSRange(
+                location: blockEnd,
+                length: 0
+            )
+        }
+
+        private func isMonospaceCharacter(at index: Int) -> Bool {
+            guard index >= 0, index < textStorage.length else { return false }
+            return textStorage.attribute(
+                MemoBodyTextView.blockStyleAttribute,
+                at: index,
+                effectiveRange: nil
+            ) as? String == EditorBlockStyle.monospace.rawValue
+        }
+
+        private func isNewline(at index: Int, in text: NSString) -> Bool {
+            guard index >= 0, index < text.length else { return false }
+            return text.substring(with: NSRange(location: index, length: 1)) == "\n"
+        }
+
+        private func isMonospaceLine(characterRange: NSRange) -> Bool {
+            let storageLength = textStorage.length
+            guard storageLength > 0 else { return false }
+            let nsText = textStorage.string as NSString
+
+            guard let inspectIndex = lineStyleIndex(in: characterRange, text: nsText) else {
+                return false
+            }
+
+            return isMonospaceCharacter(at: inspectIndex)
+        }
+
+        private func lineStyleIndex(in characterRange: NSRange, text: NSString) -> Int? {
+            let storageLength = textStorage.length
+            let start = min(max(characterRange.location, 0), storageLength)
+            let end = min(max(NSMaxRange(characterRange), start), storageLength)
+
+            if start < end {
+                var newlineIndex: Int?
+
+                for index in start..<end {
+                    if isNewline(at: index, in: text) {
+                        if newlineIndex == nil {
+                            newlineIndex = index
+                        }
+                    } else {
+                        return index
+                    }
+                }
+
+                return newlineIndex
+            }
+
+            guard start < storageLength else { return nil }
+            return start
+        }
+
+        private func mergedLineRects(_ lineRects: [CGRect]) -> [CGRect] {
+            let sortedRects = lineRects.sorted {
+                if abs($0.minY - $1.minY) > 0.5 {
+                    return $0.minY < $1.minY
+                }
+
+                return $0.minX < $1.minX
+            }
+
+            return sortedRects.reduce(into: []) { mergedRects, rect in
+                guard let lastRect = mergedRects.last else {
+                    mergedRects.append(rect)
+                    return
+                }
+
+                let maxMergeGap = MemoBodyTextView.monospaceLineMergeGap
+                if rect.minY <= lastRect.maxY + maxMergeGap {
+                    mergedRects[mergedRects.count - 1] = lastRect.union(rect)
+                } else {
+                    mergedRects.append(rect)
+                }
+            }
+        }
+
+        private func activeMonospaceLineRect() -> CGRect? {
+            guard let selectedPosition = selectedTextRange?.start else { return nil }
+
+            var rect = lineRect(for: selectedPosition) ?? textContainerRect(from: super.caretRect(for: selectedPosition))
+            if rect.height <= 0,
+               let activeFont = typingAttributes[.font] as? UIFont {
+                rect.size.height = MemoBodyTextView.lineHeight(for: activeFont)
+            }
+
+            guard rect.height > 0 else { return nil }
+            return rect
+        }
+
+        private func textContainerRect(from rect: CGRect) -> CGRect {
+            rect.offsetBy(dx: -textContainerInset.left, dy: -textContainerInset.top)
+        }
+
+        private func paddedInputRect(from sourceRect: CGRect) -> CGRect {
+            let verticalPadding = MemoBodyTextView.monospaceInputVerticalPadding
+            let containerWidth = textContainer.size.width > 0 ? textContainer.size.width : bounds.width
+            var minY = max(0, textContainerInset.top + sourceRect.minY - verticalPadding)
+            var maxY = textContainerInset.top + sourceRect.maxY + verticalPadding
+
+            if let previousTextLineRect = nearestNonMonospaceLineRect(above: sourceRect) {
+                minY = max(
+                    minY,
+                    textContainerInset.top + previousTextLineRect.maxY + MemoBodyTextView.monospaceAdjacentTextGap
+                )
+            }
+
+            if let nextTextLineRect = nearestNonMonospaceLineRect(below: sourceRect) {
+                maxY = min(
+                    maxY,
+                    textContainerInset.top + nextTextLineRect.minY - MemoBodyTextView.monospaceAdjacentTextGap
+                )
+            }
+
+            return CGRect(
+                x: textContainerInset.left,
+                y: minY,
+                width: max(containerWidth, 1),
+                height: max(maxY - minY, 1)
+            )
+        }
+
+        private func nearestNonMonospaceLineRect(above sourceRect: CGRect) -> CGRect? {
+            nonMonospaceLineRects()
+                .filter { $0.maxY <= sourceRect.minY + 0.5 }
+                .max { $0.maxY < $1.maxY }
+        }
+
+        private func nearestNonMonospaceLineRect(below sourceRect: CGRect) -> CGRect? {
+            nonMonospaceLineRects()
+                .filter { $0.minY >= sourceRect.maxY - 0.5 }
+                .min { $0.minY < $1.minY }
+        }
+
+        private func nonMonospaceLineRects() -> [CGRect] {
+            let storageLength = textStorage.length
+            guard storageLength > 0 else { return [] }
+
+            let fullCharacterRange = NSRange(location: 0, length: storageLength)
+            layoutManager.ensureLayout(forCharacterRange: fullCharacterRange)
+
+            var lineRects: [CGRect] = []
+            let glyphRange = layoutManager.glyphRange(
+                forCharacterRange: fullCharacterRange,
+                actualCharacterRange: nil
+            )
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { lineRect, _, _, glyphRange, _ in
+                let characterRange = self.layoutManager.characterRange(
+                    forGlyphRange: glyphRange,
+                    actualGlyphRange: nil
+                )
+
+                guard !self.isMonospaceLine(characterRange: characterRange) else { return }
+                lineRects.append(lineRect)
+            }
+
+            return lineRects
+        }
+
         override func caretRect(for position: UITextPosition) -> CGRect {
             var rect = super.caretRect(for: position)
+            let isMonospaceCaret = isActiveMonospaceCaret(at: position)
             let activeFont = typingAttributes[.font] as? UIFont
                 ?? font
                 ?? UIFont.systemFont(ofSize: EditorBlockStyle.body.bodyFontSize)
-            let caretHeight = activeFont.lineHeight
+            let caretHeight = isMonospaceCaret
+                ? UIFont.systemFont(
+                    ofSize: EditorBlockStyle.body.bodyFontSize,
+                    weight: EditorBlockStyle.body.bodyFontWeight
+                ).lineHeight
+                : activeFont.lineHeight
 
-            if let textRange = textRange(from: beginningOfDocument, to: position) {
-                let characterIndex = offset(from: beginningOfDocument, to: textRange.end)
-                let storageLength = textStorage.length
+            let alignmentRect = isMonospaceCaret
+                ? monospaceCaretAlignmentRect(for: position)
+                : lineRect(for: position)
 
-                if storageLength > 0 {
-                    layoutManager.ensureLayout(for: textContainer)
-
-                    let boundedCharacterIndex = min(max(characterIndex, 0), storageLength - 1)
-                    let glyphIndex = layoutManager.glyphIndexForCharacter(at: boundedCharacterIndex)
-                    let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-                    rect.origin.y = textContainerInset.top + lineRect.midY - caretHeight / 2
-                } else {
-                    rect.origin.y = rect.midY - caretHeight / 2
-                }
+            if let lineRect = alignmentRect {
+                rect.origin.y = textContainerInset.top + lineRect.midY - caretHeight / 2
             } else {
                 rect.origin.y = rect.midY - caretHeight / 2
             }
@@ -1693,24 +2515,199 @@ private struct MemoBodyTextView: UIViewRepresentable {
             rect.size.height = caretHeight
             return rect
         }
+
+        private func monospaceCaretAlignmentRect(for position: UITextPosition) -> CGRect? {
+            guard let textRange = textRange(from: beginningOfDocument, to: position) else {
+                return nil
+            }
+
+            let characterIndex = offset(from: beginningOfDocument, to: textRange.end)
+            let storageLength = textStorage.length
+            guard storageLength > 0 else { return nil }
+
+            layoutManager.ensureLayout(for: textContainer)
+
+            if characterIndex == storageLength,
+               textStorage.string.hasSuffix("\n") {
+                return trailingMonospaceCaretLineRect(endingAt: characterIndex)
+            }
+
+            let boundedCharacterIndex = min(max(characterIndex, 0), storageLength - 1)
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: boundedCharacterIndex)
+            let usedRect = layoutManager.lineFragmentUsedRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+
+            guard usedRect.height > 0 else {
+                return layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+            }
+
+            return usedRect
+        }
+
+        private func lineRect(for position: UITextPosition) -> CGRect? {
+            guard let textRange = textRange(from: beginningOfDocument, to: position) else {
+                return nil
+            }
+
+            let characterIndex = offset(from: beginningOfDocument, to: textRange.end)
+            let storageLength = textStorage.length
+            guard storageLength > 0 else { return nil }
+
+            layoutManager.ensureLayout(for: textContainer)
+
+            if characterIndex == storageLength,
+               textStorage.string.hasSuffix("\n") {
+                return trailingMonospaceCaretLineRect(endingAt: characterIndex)
+            }
+
+            let boundedCharacterIndex = min(max(characterIndex, 0), storageLength - 1)
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: boundedCharacterIndex)
+            return layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+        }
+
+        private func trailingMonospaceCaretLineRect(endingAt location: Int) -> CGRect? {
+            let nsText = textStorage.string as NSString
+            let blockRange = activeMonospaceBlockRange(endingAt: location, in: nsText)
+            guard blockRange.length > 0,
+                  let firstLineRect = firstMonospaceLineRect(in: blockRange, text: nsText)
+            else {
+                return nil
+            }
+
+            let fallbackFont = typingAttributes[.font] as? UIFont
+                ?? UIFont.monospacedSystemFont(
+                    ofSize: EditorBlockStyle.monospace.bodyFontSize,
+                    weight: EditorBlockStyle.monospace.bodyFontWeight
+                )
+            let lineHeight = max(firstLineRect.height, MemoBodyTextView.lineHeight(for: fallbackFont))
+            let lineIndex = max(
+                monospaceBlockLineCount(
+                    in: nsText,
+                    range: blockRange,
+                    includesTrailingInsertionLine: true
+                ) - 1,
+                0
+            )
+
+            return CGRect(
+                x: firstLineRect.minX,
+                y: firstLineRect.minY + CGFloat(lineIndex) * lineHeight,
+                width: max(firstLineRect.width, textContainer.size.width),
+                height: lineHeight
+            )
+        }
+
+        private func isActiveMonospaceCaret(at position: UITextPosition) -> Bool {
+            if let typingBlockStyle = typingAttributes[MemoBodyTextView.blockStyleAttribute] as? String {
+                return typingBlockStyle == EditorBlockStyle.monospace.rawValue
+            }
+
+            if typingAttributes[.font] != nil {
+                return false
+            }
+
+            if typingAttributes[MemoBodyTextView.blockStyleAttribute] as? String == EditorBlockStyle.monospace.rawValue {
+                return true
+            }
+
+            guard let textRange = textRange(from: beginningOfDocument, to: position) else {
+                return false
+            }
+
+            let characterIndex = offset(from: beginningOfDocument, to: textRange.end)
+            let storageLength = textStorage.length
+            guard storageLength > 0 else { return false }
+
+            let inspectIndex = min(max(characterIndex - (characterIndex == storageLength ? 1 : 0), 0), storageLength - 1)
+            return textStorage.attribute(
+                MemoBodyTextView.blockStyleAttribute,
+                at: inspectIndex,
+                effectiveRange: nil
+            ) as? String == EditorBlockStyle.monospace.rawValue
+        }
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: MemoBodyTextView
         var appliedFormatCommandID: UUID?
+        var handledFlushRequestID: UUID?
+        var explicitTypingLocation: Int?
+        var explicitTypingAttributes: [NSAttributedString.Key: Any]?
 
         init(_ parent: MemoBodyTextView) {
             self.parent = parent
         }
 
-        func textViewDidChange(_ textView: UITextView) {
-            parent.text = textView.text
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            guard text.contains("\n"),
+                  let monospaceAttributes = monospaceAttributesForInsertion(in: textView, range: range)
+            else {
+                return true
+            }
+
+            textView.typingAttributes = monospaceAttributes
+            return true
+        }
+
+        private func monospaceAttributesForInsertion(
+            in textView: UITextView,
+            range: NSRange
+        ) -> [NSAttributedString.Key: Any]? {
+            if let explicitTypingLocation,
+               explicitTypingLocation == range.location,
+               let explicitTypingAttributes,
+               explicitTypingAttributes[MemoBodyTextView.blockStyleAttribute] as? String != EditorBlockStyle.monospace.rawValue {
+                return nil
+            }
+
+            if textView.typingAttributes[MemoBodyTextView.blockStyleAttribute] as? String == EditorBlockStyle.monospace.rawValue {
+                return textView.typingAttributes
+            }
+
+            let storageLength = textView.textStorage.length
+            guard storageLength > 0 else { return nil }
+
+            if range.location > 0 {
+                let attributes = textView.textStorage.attributes(
+                    at: min(range.location - 1, storageLength - 1),
+                    effectiveRange: nil
+                )
+                return attributes[MemoBodyTextView.blockStyleAttribute] as? String == EditorBlockStyle.monospace.rawValue
+                    ? attributes
+                    : nil
+            }
+
+            if range.location < storageLength {
+                let attributes = textView.textStorage.attributes(at: range.location, effectiveRange: nil)
+                return attributes[MemoBodyTextView.blockStyleAttribute] as? String == EditorBlockStyle.monospace.rawValue
+                    ? attributes
+                    : nil
+            }
+
+            return nil
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            parent.isFocused = true
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            parent.syncContent(from: textView)
             parent.updateHeight(for: textView)
+            parent.isFocused = false
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.syncContent(from: textView)
+            parent.updateHeight(for: textView)
+            (textView as? RichTextView)?.refreshMonospaceBackgrounds()
+            explicitTypingLocation = nil
+            explicitTypingAttributes = nil
             syncSelectionStyle(from: textView)
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             syncSelectionStyle(from: textView)
+            (textView as? RichTextView)?.refreshMonospaceBackgrounds()
         }
 
         func syncSelectionStyle(from textView: UITextView) {
@@ -1720,13 +2717,10 @@ private struct MemoBodyTextView: UIViewRepresentable {
                 parent.selectedBlockStyle = .body
                 parent.activeInlineStyles = []
                 textView.typingAttributes = parent.attributes(blockStyle: .body, inlineStyles: [])
-                textView.font = parent.font(blockStyle: .body, inlineStyles: [])
                 return
             }
 
-            let selectedRange = textView.selectedRange
-            let index = min(max(selectedRange.location - (selectedRange.location == attributedText.length ? 1 : 0), 0), attributedText.length - 1)
-            let attributes = attributedText.attributes(at: index, effectiveRange: nil)
+            let attributes = selectionAttributes(from: textView, attributedText: attributedText)
             let blockStyle = parent.blockStyle(from: attributes)
             let inlineStyles = parent.inlineStyles(from: attributes)
 
@@ -1739,7 +2733,54 @@ private struct MemoBodyTextView: UIViewRepresentable {
             }
 
             textView.typingAttributes = parent.attributes(blockStyle: blockStyle, inlineStyles: inlineStyles)
-            textView.font = parent.font(blockStyle: blockStyle, inlineStyles: inlineStyles)
+        }
+
+        private func selectionAttributes(
+            from textView: UITextView,
+            attributedText: NSAttributedString
+        ) -> [NSAttributedString.Key: Any] {
+            let selectedRange = textView.selectedRange
+            let length = attributedText.length
+            let fallbackIndex = min(max(selectedRange.location - (selectedRange.location == length ? 1 : 0), 0), length - 1)
+
+            guard selectedRange.length == 0 else {
+                return attributedText.attributes(at: fallbackIndex, effectiveRange: nil)
+            }
+
+            if let explicitTypingLocation,
+               explicitTypingLocation == selectedRange.location,
+               let explicitTypingAttributes {
+                return explicitTypingAttributes
+            }
+
+            if selectedRange.location < length,
+               shouldReadCurrentCharacterAttributes(
+                in: attributedText.string as NSString,
+                at: selectedRange.location
+               ) {
+                return attributedText.attributes(at: selectedRange.location, effectiveRange: nil)
+            }
+
+            if selectedRange.location > 0 {
+                return attributedText.attributes(
+                    at: min(selectedRange.location - 1, length - 1),
+                    effectiveRange: nil
+                )
+            }
+
+            return attributedText.attributes(at: min(selectedRange.location, length - 1), effectiveRange: nil)
+        }
+
+        private func shouldReadCurrentCharacterAttributes(in text: NSString, at location: Int) -> Bool {
+            guard location >= 0, location < text.length else { return false }
+            guard location > 0 else { return true }
+
+            return isNewline(in: text, at: location - 1)
+        }
+
+        private func isNewline(in text: NSString, at index: Int) -> Bool {
+            guard index >= 0, index < text.length else { return false }
+            return text.substring(with: NSRange(location: index, length: 1)) == "\n"
         }
 
     }

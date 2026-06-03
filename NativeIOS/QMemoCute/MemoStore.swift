@@ -12,34 +12,40 @@ final class MemoStore: ObservableObject {
         load()
     }
 
+    @discardableResult
     func create(
         title: String,
         content: String,
+        richContentData: Data? = nil,
         category: MemoCategory,
         isPinned: Bool,
         stickers: [MemoSticker] = []
-    ) {
+    ) -> Memo {
         let memo = Memo(
             title: title,
             content: content,
+            richContentData: richContentData,
             category: category,
             isPinned: isPinned,
             stickers: stickers
         )
         memos.append(memo)
         sortMemos()
+        return memo
     }
 
     func update(
         _ memo: Memo,
         title: String,
         content: String,
+        richContentData: Data? = nil,
         isPinned: Bool,
         stickers: [MemoSticker]? = nil
     ) {
         guard let index = memos.firstIndex(where: { $0.id == memo.id }) else { return }
         memos[index].title = title
         memos[index].content = content
+        memos[index].richContentData = richContentData
         memos[index].isPinned = isPinned
         if let stickers {
             memos[index].stickers = stickers

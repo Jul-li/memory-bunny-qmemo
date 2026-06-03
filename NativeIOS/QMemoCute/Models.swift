@@ -80,6 +80,7 @@ struct Memo: Identifiable, Codable, Equatable {
     var id: UUID
     var title: String
     var content: String
+    var richContentData: Data?
     var category: MemoCategory
     var isPinned: Bool
     var createdAt: Date
@@ -90,6 +91,7 @@ struct Memo: Identifiable, Codable, Equatable {
         case id
         case title
         case content
+        case richContentData
         case category
         case isPinned
         case createdAt
@@ -101,6 +103,7 @@ struct Memo: Identifiable, Codable, Equatable {
         id: UUID = UUID(),
         title: String,
         content: String,
+        richContentData: Data? = nil,
         category: MemoCategory,
         isPinned: Bool = false,
         createdAt: Date = Date(),
@@ -110,6 +113,7 @@ struct Memo: Identifiable, Codable, Equatable {
         self.id = id
         self.title = title
         self.content = content
+        self.richContentData = richContentData
         self.category = category
         self.isPinned = isPinned
         self.createdAt = createdAt
@@ -122,6 +126,7 @@ struct Memo: Identifiable, Codable, Equatable {
         id = try container.decode(UUID.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
         content = try container.decode(String.self, forKey: .content)
+        richContentData = try container.decodeIfPresent(Data.self, forKey: .richContentData)
         category = try container.decode(MemoCategory.self, forKey: .category)
         isPinned = try container.decode(Bool.self, forKey: .isPinned)
         createdAt = try container.decode(Date.self, forKey: .createdAt)

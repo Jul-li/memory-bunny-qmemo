@@ -50,7 +50,7 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if !isTabBarHidden && selectedTab != .home {
+            if !isTabBarHidden {
                 ZStack(alignment: .bottom) {
                     bottomTabBarChrome
 
@@ -59,7 +59,6 @@ struct ContentView: View {
                         .padding(.bottom, 8)
                 }
                 .allowsHitTesting(!isHomeOverlayPresented)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(.easeOut(duration: 0.24), value: isHomeOverlayPresented)
                 .zIndex(2)
             }
@@ -320,7 +319,7 @@ struct CuteNativeTabBar: View {
                 } label: {
                     CuteNativeTabItem(tab: tab, isSelected: selectedTab == tab)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(CuteTabBarButtonStyle())
                 .frame(maxWidth: .infinity)
             }
         }
@@ -329,6 +328,15 @@ struct CuteNativeTabBar: View {
         .background(.white)
         .clipShape(Capsule())
         .shadow(color: Theme.Colors.shadow.opacity(0.12), radius: 18, y: 6)
+        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34), value: selectedTab)
+    }
+}
+
+private struct CuteTabBarButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

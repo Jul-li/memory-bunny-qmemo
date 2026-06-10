@@ -87,11 +87,6 @@ struct HomeView: View {
                     .zIndex(10)
                 }
 
-                if !isTabBarHidden {
-                    homeBottomTabBar
-                        .zIndex(1)
-                }
-
                 if isSearchPresented && !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     searchResultsLayer
                         .scaleEffect(searchDismissScale, anchor: .top)
@@ -157,46 +152,6 @@ struct HomeView: View {
         }
 
         return 4
-    }
-
-    private var homeBottomTabBar: some View {
-        ZStack(alignment: .bottom) {
-            VStack {
-                Spacer()
-                qMemoChromeMaterial(
-                    tintOpacity: 0.16,
-                    mask: LinearGradient(
-                        colors: [.clear, .clear, .black.opacity(0.62), .black],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .allowsHitTesting(false)
-                .overlay(
-                    LinearGradient(
-                        colors: [
-                            Theme.Colors.background.opacity(0),
-                            Theme.Colors.background.opacity(0),
-                            Theme.Colors.background.opacity(0.62),
-                            Theme.Colors.background.opacity(0.78),
-                            Theme.Colors.background.opacity(1)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(height: 142)
-                .ignoresSafeArea(edges: .bottom)
-                .allowsHitTesting(false)
-            }
-            .allowsHitTesting(false)
-
-            CuteNativeTabBar(selectedTab: $selectedTab)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-                .allowsHitTesting(!isHomeOverlayPresented)
-        }
-        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private var header: some View {
@@ -381,50 +336,85 @@ struct HomeView: View {
 
     private var memoList: some View {
         ScrollViewReader { scrollProxy in
-            ScrollView {
-                VStack(spacing: 0) {
-                    Color.clear
-                        .frame(height: 0)
-                        .id(MemoListAnchor.top)
+            if filteredMemos.isEmpty {
+                emptyMemoState
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Color.clear
+                            .frame(height: 0)
+                            .id(MemoListAnchor.top)
 
-                    LazyVStack(spacing: 18) {
-                        ForEach(filteredMemos) { memo in
-                            let shouldAnimateReorder = filteredMemos.first?.id != memo.id
+                        LazyVStack(spacing: 18) {
+                            ForEach(filteredMemos) { memo in
+                                let shouldAnimateReorder = filteredMemos.first?.id != memo.id
 
-                        MemoCardView(
-                            memo: memo,
-                            pinAction: {
-                                togglePin(
-                                    memo,
-                                    animateReorder: shouldAnimateReorder,
-                                    scrollProxy: scrollProxy
+                                MemoCardView(
+                                    memo: memo,
+                                    pinAction: {
+                                        togglePin(
+                                            memo,
+                                            animateReorder: shouldAnimateReorder,
+                                            scrollProxy: scrollProxy
+                                        )
+                                    },
+                                    editAction: {
+                                        openEditor(category: memo.category, memo: memo, transition: .standard)
+                                    },
+                                    deleteAction: {
+                                        requestMemoDeletion(memo)
+                                    }
+                                ) {
+                                    openEditor(category: memo.category, memo: memo, transition: .card)
+                                }
+                                .memoEditorTransitionSource(
+                                    for: memo.id,
+                                    in: editorTransitionNamespace,
+                                    enabled: !isSearchPresented
                                 )
-                            },
-                            editAction: {
-                                openEditor(category: memo.category, memo: memo, transition: .standard)
-                            },
-                            deleteAction: {
-                                requestMemoDeletion(memo)
+                                .memoTopScrollScaleEffect(in: "memoListScroll")
                             }
-                        ) {
-                            openEditor(category: memo.category, memo: memo, transition: .card)
                         }
-                        .memoEditorTransitionSource(
-                            for: memo.id,
-                            in: editorTransitionNamespace,
-                            enabled: !isSearchPresented
-                        )
-                        .memoTopScrollScaleEffect(in: "memoListScroll")
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 168)
                     }
                 }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 168)
+                .scrollIndicators(.hidden)
+                .clipped()
+                .coordinateSpace(name: "memoListScroll")
+            }
+        }
+    }
+
+    private var emptyMemoState: some View {
+        let messageLines = store.memos.isEmpty
+            ? ["还没有便签", "从第一条开始记录吧🥕"]
+            : ["暂无相关便签", "添加便签后会显示在这里"]
+
+        return GeometryReader { geometry in
+            VStack(spacing: 12) {
+                Image("EmptyMemoState")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 160, height: 160)
+                    .accessibilityLabel("暂无便签")
+
+                VStack(spacing: 4) {
+                    ForEach(messageLines, id: \.self) { line in
+                        Text(line)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.muted)
+                    }
                 }
             }
-            .scrollIndicators(.hidden)
-            .clipped()
-            .coordinateSpace(name: "memoListScroll")
+            .frame(
+                width: geometry.size.width,
+                height: max(0, geometry.size.height - 168),
+                alignment: .center
+            )
+            .padding(.bottom, 168)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func togglePin(_ memo: Memo, animateReorder: Bool, scrollProxy: ScrollViewProxy?) {

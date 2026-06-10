@@ -25,6 +25,7 @@ struct MemoEditorView: View {
     @State private var isUndoControlVisible = false
     @State private var isStickerPickerPresented = false
     @State private var isFormatPanelPresented = false
+    @State private var isToolbarColorPickerPresented = false
     @State private var isDeleteConfirmationPresented = false
     @State private var placedStickers: [PlacedEditorSticker] = []
     @State private var selectedStickerID: UUID?
@@ -38,10 +39,14 @@ struct MemoEditorView: View {
     @State private var pendingConfirmedSaveID: UUID?
     @State private var selectedBlockStyle: EditorBlockStyle = .body
     @State private var activeInlineStyles: Set<EditorInlineStyle> = []
+    @State private var activeTextColor: EditorTextColor?
     @State private var pendingFormatCommand: EditorFormatCommand?
     @FocusState private var isTitleFocused: Bool
     private let editorLineSpacing: CGFloat = 32
     private let editorBodyLineSpacing: CGFloat = 8
+    private let functionPanelCollapsedWidth: CGFloat = 128
+    private let functionPanelHorizontalPadding: CGFloat = 10
+    private let functionPanelVisibleItemCount: CGFloat = 6
     private var canUndoInput: Bool {
         !undoStack.isEmpty
     }
@@ -72,6 +77,13 @@ struct MemoEditorView: View {
         [
             GridItem(.adaptive(minimum: 92), spacing: 12)
         ]
+    }
+    private var isFunctionPanelExpanded: Bool {
+        isTitleFocused
+            || isBodyTextFocused
+            || isFormatPanelPresented
+            || isStickerPickerPresented
+            || isToolbarColorPickerPresented
     }
 
     init(
@@ -415,6 +427,18 @@ struct MemoEditorView: View {
                 .transition(.formatPanelReveal)
                 .animation(.spring(response: 0.30, dampingFraction: 0.74), value: isFormatPanelPresented)
             }
+
+            if isToolbarColorPickerPresented {
+                VStack {
+                    Spacer()
+                    toolbarColorPickerPanel
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 82)
+                }
+                .transition(.scale(scale: 0.92, anchor: .bottomTrailing).combined(with: .opacity))
+                .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isToolbarColorPickerPresented)
+                .zIndex(1)
+            }
         }
     }
 
@@ -427,6 +451,7 @@ struct MemoEditorView: View {
             flushedRequestID: $editorContentFlushedRequestID,
             selectedBlockStyle: $selectedBlockStyle,
             activeInlineStyles: $activeInlineStyles,
+            activeTextColor: $activeTextColor,
             pendingFormatCommand: $pendingFormatCommand,
             flushRequestID: editorContentFlushRequestID,
             textColor: UIColor(Theme.Colors.text),
@@ -581,8 +606,10 @@ struct MemoEditorView: View {
         EditorFormatPanelView(
             selectedBlockStyle: selectedBlockStyle,
             activeInlineStyles: activeInlineStyles,
+            activeTextColor: activeTextColor,
             onSelectBlockStyle: selectBlockStyle,
-            onToggleInlineStyle: toggleInlineStyle
+            onToggleInlineStyle: toggleInlineStyle,
+            onApplyTextColor: applyTextColor
         ) {
             withAnimation(.spring(response: 0.30, dampingFraction: 0.74)) {
                 isFormatPanelPresented = false
@@ -602,65 +629,228 @@ struct MemoEditorView: View {
     }
 
     private var functionPanel: some View {
-        HStack(spacing: 12) {
-            Label {
-                Text(category.title)
-                    .font(.system(size: 17, weight: .black))
-            } icon: {
-                Image(category.iconAsset)
-                    .resizable()
-                    .frame(width: 28, height: 28)
+        GeometryReader { proxy in
+            let panelWidth = isFunctionPanelExpanded ? proxy.size.width : functionPanelCollapsedWidth
+            let toolbarItemWidth = max(
+                (proxy.size.width - functionPanelHorizontalPadding * 2) / functionPanelVisibleItemCount,
+                44
+            )
+
+            ZStack(alignment: .trailing) {
+                QMemoGlassBackground(
+                    shape: Capsule(),
+                    tintOpacity: 0.20,
+                    fallbackFillOpacity: 0.78,
+                    strokeOpacity: 0.66,
+                    lineOpacity: 0.12
+                )
+
+                expandedFunctionPanel(itemWidth: toolbarItemWidth)
+                    .opacity(isFunctionPanelExpanded ? 1 : 0)
+                    .allowsHitTesting(isFunctionPanelExpanded)
+
+                collapsedCategoryContent
+                    .opacity(isFunctionPanelExpanded ? 0 : 1)
+                    .allowsHitTesting(!isFunctionPanelExpanded)
             }
-            .foregroundStyle(Theme.Colors.text)
-            .labelStyle(.titleAndIcon)
+            .frame(width: panelWidth, height: 54, alignment: .trailing)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .frame(height: 54)
+        .animation(.spring(response: 0.30, dampingFraction: 0.78), value: isFunctionPanelExpanded)
+    }
 
-            Spacer(minLength: 6)
+    private var collapsedCategoryContent: some View {
+        Label {
+            Text(category.title)
+                .font(.system(size: 17, weight: .black))
+        } icon: {
+            Image(category.iconAsset)
+                .resizable()
+                .frame(width: 28, height: 28)
+        }
+        .foregroundStyle(Theme.Colors.text)
+        .labelStyle(.titleAndIcon)
+        .padding(.leading, 16)
+        .padding(.trailing, 16)
+        .frame(width: functionPanelCollapsedWidth, height: 54, alignment: .center)
+    }
 
+    private func expandedFunctionPanel(itemWidth: CGFloat) -> some View {
+        ScrollView(.horizontal) {
             HStack(spacing: 0) {
-                Button {
+                toolbarTextButton("格式", width: itemWidth) {
                     withAnimation(.spring(response: 0.30, dampingFraction: 0.74)) {
                         isStickerPickerPresented = false
+                        isToolbarColorPickerPresented = false
                         isFormatPanelPresented = true
                     }
-                } label: {
-                    Text("格式")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(width: 126, height: 38)
                 }
-                .accessibilityLabel("格式")
 
-                Divider()
-                    .frame(height: 28)
-
-                Button {
+                toolbarIconButton(systemName: "face.smiling", accessibilityLabel: "贴纸", width: itemWidth) {
                     withAnimation(.spring(response: 0.30, dampingFraction: 0.74)) {
                         isFormatPanelPresented = false
+                        isToolbarColorPickerPresented = false
                         isStickerPickerPresented = true
                     }
-                } label: {
-                    Image(systemName: "face.smiling")
-                        .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 52, height: 38)
                 }
-                .accessibilityLabel("贴纸")
+
+                toolbarIconButton(systemName: "checklist", accessibilityLabel: "代办", width: itemWidth) {
+                    insertTodoItem()
+                }
+
+                toolbarAssetButton(
+                    assetName: "FormatBold",
+                    accessibilityLabel: "加粗",
+                    isSelected: activeInlineStyles.contains(.bold),
+                    width: itemWidth
+                ) {
+                    toggleInlineStyle(.bold)
+                }
+
+                toolbarAssetButton(
+                    assetName: "FormatItalic",
+                    accessibilityLabel: "倾斜",
+                    isSelected: activeInlineStyles.contains(.italic),
+                    width: itemWidth
+                ) {
+                    toggleInlineStyle(.italic)
+                }
+
+                toolbarAssetButton(
+                    assetName: "FormatUnderline",
+                    accessibilityLabel: "下划线",
+                    isSelected: activeInlineStyles.contains(.underline),
+                    width: itemWidth
+                ) {
+                    toggleInlineStyle(.underline)
+                }
+
+                toolbarAssetButton(
+                    assetName: "FormatStrikethrough",
+                    accessibilityLabel: "划线",
+                    isSelected: activeInlineStyles.contains(.strikethrough),
+                    width: itemWidth
+                ) {
+                    toggleInlineStyle(.strikethrough)
+                }
+
+                toolbarAssetButton(
+                    assetName: "FormatTextBackground",
+                    accessibilityLabel: "颜色编辑",
+                    isSelected: activeTextColor != nil,
+                    width: itemWidth
+                ) {
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.78)) {
+                        isFormatPanelPresented = false
+                        isStickerPickerPresented = false
+                        isToolbarColorPickerPresented.toggle()
+                    }
+                }
             }
+            .padding(.horizontal, functionPanelHorizontalPadding)
             .buttonStyle(.plain)
             .foregroundStyle(Theme.Colors.text)
-            .background(Color(.secondarySystemFill))
-            .clipShape(Capsule())
         }
-        .padding(.leading, 16)
-        .padding(.trailing, 10)
-        .frame(height: 54)
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, minHeight: 54, maxHeight: 54, alignment: .trailing)
+    }
+
+    private var toolbarColorPickerPanel: some View {
+        HStack(spacing: 10) {
+            ForEach(EditorTextColor.allCases, id: \.self) { textColor in
+                Button {
+                    applyTextColor(textColor)
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.78)) {
+                        isToolbarColorPickerPresented = false
+                    }
+                } label: {
+                    Circle()
+                        .fill(textColor.color)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white, lineWidth: 1)
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(
+                                    activeTextColor == textColor ? Color(hex: "F1920D") : Color.clear,
+                                    lineWidth: 2
+                                )
+                                .padding(-3)
+                        )
+                        .frame(width: 26, height: 26)
+                        .frame(width: 38, height: 38)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(textColor.accessibilityLabel)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(
             QMemoGlassBackground(
-                shape: Capsule(),
+                shape: RoundedRectangle(cornerRadius: 22, style: .continuous),
                 tintOpacity: 0.20,
-                fallbackFillOpacity: 0.78,
-                strokeOpacity: 0.66,
-                lineOpacity: 0.12
+                fallbackFillOpacity: 0.82,
+                strokeOpacity: 0.62,
+                lineOpacity: 0.10
             )
         )
+        .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 18, y: 8)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private func toolbarTextButton(
+        _ title: String,
+        width: CGFloat,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: width, height: 38)
+        }
+        .accessibilityLabel(title)
+    }
+
+    private func toolbarIconButton(
+        systemName: String,
+        accessibilityLabel: String,
+        width: CGFloat = 44,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: width, height: 38)
+        }
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func toolbarAssetButton(
+        assetName: String,
+        accessibilityLabel: String,
+        isSelected: Bool,
+        width: CGFloat = 44,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(isSelected ? Color(hex: "FDE8A4") : Color.clear)
+                    .frame(width: 34, height: 34)
+
+                Image(assetName)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(isSelected ? Color(hex: "F1920D") : Color.primary.opacity(0.64))
+                    .frame(width: 22, height: 22)
+            }
+            .frame(width: width, height: 38)
+        }
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private func persistDraftIfNeeded() {
@@ -852,6 +1042,20 @@ struct MemoEditorView: View {
         pendingFormatCommand = EditorFormatCommand(kind: .inline(inlineStyle, isActive: shouldActivate))
     }
 
+    private func applyTextColor(_ textColor: EditorTextColor) {
+        activeTextColor = textColor
+        pendingFormatCommand = EditorFormatCommand(kind: .textColor(textColor))
+    }
+
+    private func insertTodoItem() {
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.78)) {
+            isFormatPanelPresented = false
+            isStickerPickerPresented = false
+            isToolbarColorPickerPresented = false
+        }
+        pendingFormatCommand = EditorFormatCommand(kind: .insertText("□ "))
+    }
+
     private func addSticker(assetName: String) {
         let sticker = PlacedEditorSticker(assetName: assetName)
         placedStickers.append(sticker)
@@ -952,6 +1156,103 @@ private enum EditorInlineStyle: String, Hashable {
     case strikethrough
 }
 
+private enum EditorTextColor: String, CaseIterable, Hashable {
+    case orange
+    case blue
+    case mint
+    case pink
+    case purple
+    case gray
+
+    var color: Color {
+        Color(hex: hexValue)
+    }
+
+    var uiColor: UIColor {
+        UIColor(
+            red: CGFloat(redValue) / 255,
+            green: CGFloat(greenValue) / 255,
+            blue: CGFloat(blueValue) / 255,
+            alpha: 1
+        )
+    }
+
+    var backgroundUIColor: UIColor {
+        uiColor.withAlphaComponent(0.14)
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .orange:
+            "橙色"
+        case .blue:
+            "蓝色"
+        case .mint:
+            "薄荷绿"
+        case .pink:
+            "粉色"
+        case .purple:
+            "紫色"
+        case .gray:
+            "灰色"
+        }
+    }
+
+    private var hexValue: String {
+        switch self {
+        case .orange:
+            "FF8A22"
+        case .blue:
+            "5AA7FF"
+        case .mint:
+            "44CFA2"
+        case .pink:
+            "FF8FB3"
+        case .purple:
+            "A889FF"
+        case .gray:
+            "8E8E93"
+        }
+    }
+
+    private var redValue: Int {
+        Int(String(hexValue.prefix(2)), radix: 16) ?? 0
+    }
+
+    private var greenValue: Int {
+        Int(String(hexValue.dropFirst(2).prefix(2)), radix: 16) ?? 0
+    }
+
+    private var blueValue: Int {
+        Int(String(hexValue.dropFirst(4).prefix(2)), radix: 16) ?? 0
+    }
+
+    func matches(_ color: UIColor) -> Bool {
+        let current = color.resolvedColor(with: UITraitCollection.current)
+        let expected = uiColor.resolvedColor(with: UITraitCollection.current)
+        var currentRed: CGFloat = 0
+        var currentGreen: CGFloat = 0
+        var currentBlue: CGFloat = 0
+        var currentAlpha: CGFloat = 0
+        var expectedRed: CGFloat = 0
+        var expectedGreen: CGFloat = 0
+        var expectedBlue: CGFloat = 0
+        var expectedAlpha: CGFloat = 0
+
+        guard
+            current.getRed(&currentRed, green: &currentGreen, blue: &currentBlue, alpha: &currentAlpha),
+            expected.getRed(&expectedRed, green: &expectedGreen, blue: &expectedBlue, alpha: &expectedAlpha)
+        else {
+            return false
+        }
+
+        return abs(currentRed - expectedRed) < 0.01
+            && abs(currentGreen - expectedGreen) < 0.01
+            && abs(currentBlue - expectedBlue) < 0.01
+            && abs(currentAlpha - expectedAlpha) < 0.01
+    }
+}
+
 private struct EditorStickerOption: Identifiable {
     let assetName: String
     let title: String
@@ -986,10 +1287,17 @@ private extension AnyTransition {
 }
 
 private struct EditorFormatPanelView: View {
+    @State private var isColorPickerPresented = false
+    @State private var colorPickerPanelProgress: CGFloat = 0
+    @State private var visibleColorPickerColors: Set<EditorTextColor> = []
+    @State private var colorPickerAnimationID = UUID()
+
     let selectedBlockStyle: EditorBlockStyle
     let activeInlineStyles: Set<EditorInlineStyle>
+    let activeTextColor: EditorTextColor?
     let onSelectBlockStyle: (EditorBlockStyle) -> Void
     let onToggleInlineStyle: (EditorInlineStyle) -> Void
+    let onApplyTextColor: (EditorTextColor) -> Void
     let onDismiss: () -> Void
 
     private let textStyles = [
@@ -1007,123 +1315,293 @@ private struct EditorFormatPanelView: View {
     ]
     private let selectedFill = Color(hex: "FDE8A4")
     private let selectedForeground = Color(hex: "F1920D")
+    private let colorPickerSequenceDuration = 0.30
+    private let colorPickerSwatchDuration = 0.10
+    private let colorPickerOpeningSwatchDelay = 0.02
+    private let colorPickerPanelFullWidth: CGFloat = 302
+    private let colorPickerPanelHeight: CGFloat = 58
+    private var selectedTextColor: EditorTextColor {
+        activeTextColor ?? .orange
+    }
+
+    private var colorPickerPanelWidth: CGFloat {
+        max(colorPickerPanelFullWidth * colorPickerPanelProgress, 0)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center) {
-                Text("格式")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(Theme.Colors.text)
-
-                Spacer()
-
-                Button {
-                    onDismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .black))
+        ZStack(alignment: .bottomTrailing) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center) {
+                    Text("格式")
+                        .font(.system(size: 18, weight: .black))
                         .foregroundStyle(Theme.Colors.text)
-                        .frame(width: 34, height: 34)
-                        .background(
-                            QMemoGlassBackground(
-                                shape: Circle(),
-                                tintOpacity: 0.18,
-                                fallbackFillOpacity: 0.82,
-                                strokeOpacity: 0.62,
-                                lineOpacity: 0.10
-                            )
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("关闭")
-            }
-            .padding(.horizontal, 18)
 
-            HStack(spacing: 0) {
-                ForEach(textStyles) { option in
-                    let isSelected = selectedBlockStyle == option.style
+                    Spacer()
 
                     Button {
-                        withAnimation(.easeOut(duration: 0.14)) {
-                            onSelectBlockStyle(option.style)
-                        }
+                        onDismiss()
                     } label: {
-                        Text(option.title)
-                            .font(option.font)
-                            .foregroundStyle(isSelected ? selectedForeground : Color.primary.opacity(0.68))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .frame(maxWidth: .infinity, minHeight: 40)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(Theme.Colors.text)
+                            .frame(width: 34, height: 34)
                             .background(
-                                Capsule()
-                                    .fill(isSelected ? selectedFill : Color.clear)
+                                QMemoGlassBackground(
+                                    shape: Circle(),
+                                    tintOpacity: 0.18,
+                                    fallbackFillOpacity: 0.82,
+                                    strokeOpacity: 0.62,
+                                    lineOpacity: 0.10
+                                )
                             )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(option.title)
+                    .accessibilityLabel("关闭")
                 }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 14)
+                .padding(.horizontal, 18)
 
-            HStack(spacing: 12) {
                 HStack(spacing: 0) {
-                    ForEach(Array(inlineStyles.enumerated()), id: \.element.id) { index, item in
-                        let isSelected = activeInlineStyles.contains(item.style)
+                    ForEach(textStyles) { option in
+                        let isSelected = selectedBlockStyle == option.style
 
-                        formatSegmentButton(
-                            assetName: item.assetName,
-                            accessibilityLabel: item.title,
-                            isSelected: isSelected,
-                            width: nil
-                        ) {
-                            withAnimation(.easeOut(duration: 0.12)) {
-                                onToggleInlineStyle(item.style)
+                        Button {
+                            withAnimation(.easeOut(duration: 0.14)) {
+                                onSelectBlockStyle(option.style)
                             }
+                        } label: {
+                            Text(option.title)
+                                .font(option.font)
+                                .foregroundStyle(isSelected ? selectedForeground : Color.primary.opacity(0.68))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .frame(maxWidth: .infinity, minHeight: 40)
+                                .background(
+                                    Capsule()
+                                        .fill(isSelected ? selectedFill : Color.clear)
+                                )
                         }
-
-                        if index < inlineStyles.count - 1 {
-                            Divider()
-                                .frame(height: 40)
-                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(option.title)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .background(Color(.quaternarySystemFill))
-                .clipShape(Capsule())
+                .padding(.horizontal, 14)
 
-                HStack(spacing: 0) {
-                    formatSegmentButton(
-                        assetName: "FormatTextBackground",
-                        accessibilityLabel: "文本背景",
-                        isSelected: false,
-                        width: 50
-                    ) {}
+                HStack(spacing: 12) {
+                    HStack(spacing: 0) {
+                        ForEach(Array(inlineStyles.enumerated()), id: \.element.id) { index, item in
+                            let isSelected = activeInlineStyles.contains(item.style)
 
-                    Divider()
-                        .frame(height: 40)
+                            formatSegmentButton(
+                                assetName: item.assetName,
+                                accessibilityLabel: item.title,
+                                isSelected: isSelected,
+                                width: nil
+                            ) {
+                                withAnimation(.easeOut(duration: 0.12)) {
+                                    onToggleInlineStyle(item.style)
+                                }
+                            }
 
-                    Button {} label: {
-                        Circle()
-                            .fill(Color.orange)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white, lineWidth: 1)
-                            )
-                            .frame(width: 24, height: 24)
-                            .frame(width: 50, height: 48)
+                            if index < inlineStyles.count - 1 {
+                                Divider()
+                                    .frame(height: 40)
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("背景颜色")
+                    .frame(maxWidth: .infinity)
+                    .background(Color(.quaternarySystemFill))
+                    .clipShape(Capsule())
+
+                    HStack(spacing: 0) {
+                        formatSegmentButton(
+                            assetName: "FormatTextBackground",
+                            accessibilityLabel: "文本颜色",
+                            isSelected: activeTextColor != nil,
+                            width: 50
+                        ) {
+                            withAnimation(.easeOut(duration: 0.12)) {
+                                onApplyTextColor(selectedTextColor)
+                            }
+                        }
+
+                        Divider()
+                            .frame(height: 40)
+
+                        Button {
+                            toggleColorPicker()
+                        } label: {
+                            Circle()
+                                .fill(selectedTextColor.color)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 1)
+                                )
+                                .frame(width: 24, height: 24)
+                                .frame(width: 50, height: 48)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("选择颜色")
+                    }
+                    .background(Color(.quaternarySystemFill))
+                    .clipShape(Capsule())
                 }
-                .background(Color(.quaternarySystemFill))
-                .clipShape(Capsule())
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 14)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 14)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(
+                Color.black.opacity(0.001)
+                    .onTapGesture {
+                        closeColorPicker()
+                    }
+            )
+
+            if isColorPickerPresented {
+                colorPickerPanel
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 66)
+            }
         }
-        .padding(.vertical, 18)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func closeColorPicker() {
+        guard isColorPickerPresented else { return }
+
+        let animationID = UUID()
+        colorPickerAnimationID = animationID
+        let colors = Array(EditorTextColor.allCases)
+
+        withAnimation(.easeOut(duration: colorPickerSequenceDuration)) {
+            colorPickerPanelProgress = 0
+        }
+
+        for (index, textColor) in colors.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + colorPickerDelay(for: index, count: colors.count)) {
+                guard colorPickerAnimationID == animationID else { return }
+
+                withAnimation(.easeOut(duration: colorPickerSwatchDuration)) {
+                    _ = visibleColorPickerColors.remove(textColor)
+                }
+            }
+        }
+
+        let dismissDelay = colorPickerSequenceDuration
+        DispatchQueue.main.asyncAfter(deadline: .now() + dismissDelay) {
+            guard colorPickerAnimationID == animationID else { return }
+
+            isColorPickerPresented = false
+            visibleColorPickerColors = []
+        }
+    }
+
+    private func openColorPicker() {
+        guard !isColorPickerPresented else { return }
+
+        let animationID = UUID()
+        colorPickerAnimationID = animationID
+        colorPickerPanelProgress = 0
+        visibleColorPickerColors = []
+
+        isColorPickerPresented = true
+
+        withAnimation(.easeOut(duration: colorPickerSequenceDuration)) {
+            colorPickerPanelProgress = 1
+        }
+
+        for (index, textColor) in Array(EditorTextColor.allCases.reversed()).enumerated() {
+            let delay = colorPickerOpeningSwatchDelay
+                + colorPickerDelay(
+                    for: index,
+                    count: EditorTextColor.allCases.count,
+                    duration: colorPickerSequenceDuration - colorPickerOpeningSwatchDelay
+                )
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard colorPickerAnimationID == animationID, isColorPickerPresented else { return }
+
+                withAnimation(.easeOut(duration: colorPickerSwatchDuration)) {
+                    _ = visibleColorPickerColors.insert(textColor)
+                }
+            }
+        }
+    }
+
+    private func colorPickerDelay(
+        for index: Int,
+        count: Int,
+        duration: TimeInterval? = nil
+    ) -> TimeInterval {
+        guard count > 1 else { return 0 }
+        let animationDuration = duration ?? colorPickerSequenceDuration
+        let staggerWindow = max(animationDuration - colorPickerSwatchDuration, 0)
+        return staggerWindow * Double(index) / Double(count - 1)
+    }
+
+    private func toggleColorPicker() {
+        if isColorPickerPresented {
+            closeColorPicker()
+        } else {
+            openColorPicker()
+        }
+    }
+
+    private var colorPickerPanel: some View {
+        ZStack(alignment: .trailing) {
+            QMemoGlassBackground(
+                shape: RoundedRectangle(cornerRadius: 22, style: .continuous),
+                tintOpacity: 0.20,
+                fallbackFillOpacity: 0.82,
+                strokeOpacity: 0.62,
+                lineOpacity: 0.10
+            )
+            .frame(width: colorPickerPanelWidth, height: colorPickerPanelHeight)
+            .shadow(color: Theme.Colors.shadow.opacity(0.14), radius: 18, y: 8)
+
+            colorPickerSwatches
+                .frame(width: colorPickerPanelFullWidth, height: colorPickerPanelHeight, alignment: .trailing)
+                .frame(width: colorPickerPanelWidth, height: colorPickerPanelHeight, alignment: .trailing)
+                .clipped()
+        }
+        .frame(width: colorPickerPanelWidth, height: colorPickerPanelHeight, alignment: .trailing)
+    }
+
+    private var colorPickerSwatches: some View {
+        HStack(spacing: 10) {
+            ForEach(EditorTextColor.allCases, id: \.self) { textColor in
+                Button {
+                    onApplyTextColor(textColor)
+                    closeColorPicker()
+                } label: {
+                    let isVisible = visibleColorPickerColors.contains(textColor)
+
+                    Circle()
+                        .fill(textColor.color)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white, lineWidth: 1)
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(
+                                    activeTextColor == textColor ? selectedForeground : Color.clear,
+                                    lineWidth: 2
+                                )
+                                .padding(-3)
+                        )
+                        .frame(width: 26, height: 26)
+                        .frame(width: 38, height: 38)
+                        .scaleEffect(isVisible ? 1 : 0.68)
+                        .offset(x: isVisible ? 0 : 10)
+                        .opacity(isVisible ? 1 : 0)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(textColor.accessibilityLabel)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     private func formatSegmentButton(
@@ -1187,9 +1665,32 @@ private struct EditorFormatCommand: Equatable {
         return blockStyle != nil
     }
 
+    func isCollapsedTypingOnlyCommand(selectedRange: NSRange) -> Bool {
+        guard selectedRange.length == 0 else { return false }
+
+        if case .textColor = kind {
+            return true
+        }
+
+        return false
+    }
+
+    func usesExplicitTypingAttributes(selectedRange: NSRange) -> Bool {
+        guard selectedRange.length == 0 else { return false }
+
+        switch kind {
+        case .block, .textColor:
+            return true
+        case .inline, .insertText:
+            return false
+        }
+    }
+
     enum Kind: Equatable {
         case block(EditorBlockStyle)
         case inline(EditorInlineStyle, isActive: Bool)
+        case textColor(EditorTextColor)
+        case insertText(String)
     }
 }
 
@@ -1526,6 +2027,7 @@ private struct MemoBodyTextView: UIViewRepresentable {
     @Binding var flushedRequestID: UUID?
     @Binding var selectedBlockStyle: EditorBlockStyle
     @Binding var activeInlineStyles: Set<EditorInlineStyle>
+    @Binding var activeTextColor: EditorTextColor?
     @Binding var pendingFormatCommand: EditorFormatCommand?
 
     let flushRequestID: UUID?
@@ -1556,17 +2058,20 @@ private struct MemoBodyTextView: UIViewRepresentable {
         textView.isScrollEnabled = false
         textView.alwaysBounceVertical = false
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
+        textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles, textColor: activeTextColor)
         textView.textContainer.exclusionPaths = boundedExclusionPaths(for: textView)
         textView.attributedText = storedAttributedString(for: text)
-        textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
+        textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles, textColor: activeTextColor)
+        textView.onTapBelowText = { [weak textView, weak coordinator = context.coordinator] in
+            guard let textView else { return }
+            coordinator?.beginParagraphAfterContent(in: textView)
+        }
         textView.refreshMonospaceBackgrounds()
         return textView
     }
 
     func updateUIView(_ textView: RichTextView, context: Context) {
         context.coordinator.parent = self
-        textView.textColor = textColor
         textView.isScrollEnabled = false
         textView.textContainer.exclusionPaths = boundedExclusionPaths(for: textView)
 
@@ -1586,7 +2091,7 @@ private struct MemoBodyTextView: UIViewRepresentable {
             apply(command, to: textView, context: context)
             context.coordinator.appliedFormatCommandID = command.id
         } else {
-            textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
+            textView.typingAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles, textColor: activeTextColor)
         }
 
         if let flushRequestID,
@@ -1602,9 +2107,27 @@ private struct MemoBodyTextView: UIViewRepresentable {
 
     private func apply(_ command: EditorFormatCommand, to textView: UITextView, context: Context) {
         let selectedRange = textView.selectedRange
-        let targetRange = formatTargetRange(in: textView, command: command)
         let mutableText = NSMutableAttributedString(attributedString: textView.attributedText ?? attributedString(for: textView.text))
-        let nextAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles)
+        let nextAttributes = attributes(blockStyle: selectedBlockStyle, inlineStyles: activeInlineStyles, textColor: activeTextColor)
+
+        if case .insertText(let insertedText) = command.kind {
+            let insertionRange = clampedRange(selectedRange, in: textView.text)
+            let attributedInsertedText = NSAttributedString(string: insertedText, attributes: nextAttributes)
+            mutableText.replaceCharacters(in: insertionRange, with: attributedInsertedText)
+            normalizeMonospaceParagraphSpacing(in: mutableText)
+            textView.attributedText = mutableText
+            textView.selectedRange = NSRange(location: insertionRange.location + insertedText.utf16.count, length: 0)
+            text = mutableText.string
+            richContentData = archivedData(for: mutableText)
+            textView.typingAttributes = nextAttributes
+            context.coordinator.explicitTypingLocation = nil
+            context.coordinator.explicitTypingAttributes = nil
+            updateHeight(for: textView)
+            (textView as? RichTextView)?.refreshMonospaceBackgrounds()
+            return
+        }
+
+        let targetRange = formatTargetRange(in: textView, command: command)
 
         if targetRange.length > 0 {
             apply(command, to: mutableText, in: clampedRange(targetRange, in: textView.text))
@@ -1616,7 +2139,7 @@ private struct MemoBodyTextView: UIViewRepresentable {
         }
 
         textView.typingAttributes = nextAttributes
-        if case .block = command.kind, selectedRange.length == 0 {
+        if command.usesExplicitTypingAttributes(selectedRange: selectedRange) {
             context.coordinator.explicitTypingLocation = selectedRange.location
             context.coordinator.explicitTypingAttributes = nextAttributes
         } else {
@@ -1634,6 +2157,7 @@ private struct MemoBodyTextView: UIViewRepresentable {
 
         for run in runs {
             var currentInlineStyles = run.inlineStyles
+            var currentTextColor = run.textColor
             let nextBlockStyle: EditorBlockStyle
 
             switch command.kind {
@@ -1651,10 +2175,15 @@ private struct MemoBodyTextView: UIViewRepresentable {
                 } else {
                     currentInlineStyles.remove(inlineStyle)
                 }
+            case .textColor(let textColor):
+                nextBlockStyle = run.blockStyle
+                currentTextColor = textColor
+            case .insertText:
+                nextBlockStyle = run.blockStyle
             }
 
             text.setAttributes(
-                attributes(blockStyle: nextBlockStyle, inlineStyles: currentInlineStyles),
+                attributes(blockStyle: nextBlockStyle, inlineStyles: currentInlineStyles, textColor: currentTextColor),
                 range: run.range
             )
         }
@@ -1663,14 +2192,14 @@ private struct MemoBodyTextView: UIViewRepresentable {
     private func attributeRuns(
         in text: NSAttributedString,
         range targetRange: NSRange
-    ) -> [(range: NSRange, blockStyle: EditorBlockStyle, inlineStyles: Set<EditorInlineStyle>)] {
-        var runs: [(NSRange, EditorBlockStyle, Set<EditorInlineStyle>)] = []
+    ) -> [(range: NSRange, blockStyle: EditorBlockStyle, inlineStyles: Set<EditorInlineStyle>, textColor: EditorTextColor?)] {
+        var runs: [(NSRange, EditorBlockStyle, Set<EditorInlineStyle>, EditorTextColor?)] = []
 
         text.enumerateAttributes(in: targetRange, options: []) { attributes, effectiveRange, _ in
             let affectedRange = NSIntersectionRange(effectiveRange, targetRange)
             guard affectedRange.length > 0 else { return }
 
-            runs.append((affectedRange, blockStyle(from: attributes), inlineStyles(from: attributes)))
+            runs.append((affectedRange, blockStyle(from: attributes), inlineStyles(from: attributes), textColor(from: attributes)))
         }
 
         return runs
@@ -1692,6 +2221,10 @@ private struct MemoBodyTextView: UIViewRepresentable {
         }
 
         guard nsText.length > 0 else {
+            return NSRange(location: selectedRange.location, length: 0)
+        }
+
+        if command.isCollapsedTypingOnlyCommand(selectedRange: selectedRange) {
             return NSRange(location: selectedRange.location, length: 0)
         }
 
@@ -1809,19 +2342,25 @@ private struct MemoBodyTextView: UIViewRepresentable {
 
     private func attributes(
         blockStyle: EditorBlockStyle,
-        inlineStyles: Set<EditorInlineStyle>
+        inlineStyles: Set<EditorInlineStyle>,
+        textColor selectedTextColor: EditorTextColor? = nil
     ) -> [NSAttributedString.Key: Any] {
         let font = font(blockStyle: blockStyle, inlineStyles: inlineStyles)
         let paragraphStyle = paragraphStyle(blockStyle: blockStyle, font: font)
+        let foregroundColor = selectedTextColor?.uiColor ?? textColor
 
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: textColor,
+            .foregroundColor: foregroundColor,
             .paragraphStyle: paragraphStyle,
             .baselineOffset: Self.baselineOffset(for: font),
             Self.blockStyleAttribute: blockStyle.rawValue,
             Self.inlineStylesAttribute: inlineStyles.map(\.rawValue).sorted().joined(separator: ",")
         ]
+
+        if let selectedTextColor {
+            attributes[.backgroundColor] = selectedTextColor.backgroundUIColor
+        }
 
         if inlineStyles.contains(.underline) {
             attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
@@ -2028,6 +2567,12 @@ private struct MemoBodyTextView: UIViewRepresentable {
         return Set(rawValue.split(separator: ",").compactMap { EditorInlineStyle(rawValue: String($0)) })
     }
 
+    private func textColor(from attributes: [NSAttributedString.Key: Any]) -> EditorTextColor? {
+        guard let foregroundColor = attributes[.foregroundColor] as? UIColor else { return nil }
+
+        return EditorTextColor.allCases.first { $0.matches(foregroundColor) }
+    }
+
     private func clampedRange(_ range: NSRange, in text: String) -> NSRange {
         let count = (text as NSString).length
         let location = min(range.location, count)
@@ -2070,15 +2615,18 @@ private struct MemoBodyTextView: UIViewRepresentable {
 
     final class RichTextView: UITextView {
         private let monospaceBackgroundLayer = CAShapeLayer()
+        var onTapBelowText: (() -> Void)?
 
         override init(frame: CGRect, textContainer: NSTextContainer?) {
             super.init(frame: frame, textContainer: textContainer)
             configureMonospaceBackgroundLayer()
+            configureBlankAreaTapRecognizer()
         }
 
         required init?(coder: NSCoder) {
             super.init(coder: coder)
             configureMonospaceBackgroundLayer()
+            configureBlankAreaTapRecognizer()
         }
 
         override func layoutSubviews() {
@@ -2124,6 +2672,37 @@ private struct MemoBodyTextView: UIViewRepresentable {
                 "bounds": NSNull()
             ]
             layer.insertSublayer(monospaceBackgroundLayer, at: 0)
+        }
+
+        private func configureBlankAreaTapRecognizer() {
+            let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleBlankAreaTap(_:)))
+            recognizer.cancelsTouchesInView = false
+            recognizer.delegate = self
+            addGestureRecognizer(recognizer)
+        }
+
+        @objc private func handleBlankAreaTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  isTapBelowRenderedText(recognizer.location(in: self))
+            else {
+                return
+            }
+
+            onTapBelowText?()
+        }
+
+        private func isTapBelowRenderedText(_ location: CGPoint) -> Bool {
+            guard textStorage.length > 0,
+                  let endPosition = position(
+                    from: beginningOfDocument,
+                    offset: textStorage.length
+                  )
+            else {
+                return false
+            }
+
+            let endCaretRect = super.caretRect(for: endPosition)
+            return location.y > endCaretRect.maxY + 2
         }
 
         func refreshMonospaceBackgrounds() {
@@ -2556,12 +3135,35 @@ private struct MemoBodyTextView: UIViewRepresentable {
 
             if characterIndex == storageLength,
                textStorage.string.hasSuffix("\n") {
-                return trailingMonospaceCaretLineRect(endingAt: characterIndex)
+                if isActiveMonospaceCaret(at: position) {
+                    return trailingMonospaceCaretLineRect(endingAt: characterIndex)
+                }
+
+                var rect = textContainerRect(from: super.caretRect(for: position))
+                if isEmptyTrailingParagraphAfterMonospace(endingAt: characterIndex) {
+                    rect.origin.y += MemoBodyTextView.monospaceBoundarySpacing
+                }
+                return rect
             }
 
             let boundedCharacterIndex = min(max(characterIndex, 0), storageLength - 1)
             let glyphIndex = layoutManager.glyphIndexForCharacter(at: boundedCharacterIndex)
             return layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+        }
+
+        private func isEmptyTrailingParagraphAfterMonospace(endingAt location: Int) -> Bool {
+            let newlineIndex = location - 1
+            let previousCharacterIndex = newlineIndex - 1
+            guard newlineIndex >= 0,
+                  previousCharacterIndex >= 0,
+                  newlineIndex < textStorage.length,
+                  textStorage.string.hasSuffix("\n")
+            else {
+                return false
+            }
+
+            return !isMonospaceCharacter(at: newlineIndex)
+                && isMonospaceCharacter(at: previousCharacterIndex)
         }
 
         private func trailingMonospaceCaretLineRect(endingAt location: Int) -> CGRect? {
@@ -2635,6 +3237,68 @@ private struct MemoBodyTextView: UIViewRepresentable {
 
         init(_ parent: MemoBodyTextView) {
             self.parent = parent
+        }
+
+        func beginParagraphAfterContent(in textView: RichTextView) {
+            let textLength = textView.textStorage.length
+            guard textLength > 0 else {
+                DispatchQueue.main.async {
+                    textView.becomeFirstResponder()
+                    textView.selectedRange = NSRange(location: 0, length: 0)
+                }
+                return
+            }
+
+            let trailingAttributes = textView.textStorage.attributes(
+                at: textLength - 1,
+                effectiveRange: nil
+            )
+            let trailingBlockStyle = parent.blockStyle(from: trailingAttributes)
+            let shouldExitMonospace = trailingBlockStyle == .monospace
+            let nextParagraphAttributes = shouldExitMonospace
+                ? parent.attributes(
+                    blockStyle: .body,
+                    inlineStyles: parent.inlineStyles(from: trailingAttributes),
+                    textColor: parent.textColor(from: trailingAttributes)
+                )
+                : trailingAttributes
+
+            let trailingCharacterRange = NSRange(location: textLength - 1, length: 1)
+            let endsWithNewline = (textView.text as NSString).substring(
+                with: trailingCharacterRange
+            ) == "\n"
+
+            if !endsWithNewline {
+                textView.textStorage.append(
+                    NSAttributedString(
+                        string: "\n",
+                        attributes: shouldExitMonospace ? nextParagraphAttributes : trailingAttributes
+                    )
+                )
+                textView.typingAttributes = nextParagraphAttributes
+                parent.syncContent(from: textView)
+                parent.updateHeight(for: textView)
+                textView.refreshMonospaceBackgrounds()
+            } else if shouldExitMonospace {
+                textView.textStorage.setAttributes(
+                    nextParagraphAttributes,
+                    range: trailingCharacterRange
+                )
+                textView.typingAttributes = nextParagraphAttributes
+                parent.syncContent(from: textView)
+                parent.updateHeight(for: textView)
+                textView.refreshMonospaceBackgrounds()
+            }
+
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                textView.becomeFirstResponder()
+                textView.selectedRange = NSRange(location: textView.textStorage.length, length: 0)
+                textView.typingAttributes = nextParagraphAttributes
+                explicitTypingLocation = shouldExitMonospace ? textView.textStorage.length : nil
+                explicitTypingAttributes = shouldExitMonospace ? nextParagraphAttributes : nil
+                syncSelectionStyle(from: textView)
+            }
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
@@ -2716,6 +3380,7 @@ private struct MemoBodyTextView: UIViewRepresentable {
             else {
                 parent.selectedBlockStyle = .body
                 parent.activeInlineStyles = []
+                parent.activeTextColor = nil
                 textView.typingAttributes = parent.attributes(blockStyle: .body, inlineStyles: [])
                 return
             }
@@ -2723,6 +3388,7 @@ private struct MemoBodyTextView: UIViewRepresentable {
             let attributes = selectionAttributes(from: textView, attributedText: attributedText)
             let blockStyle = parent.blockStyle(from: attributes)
             let inlineStyles = parent.inlineStyles(from: attributes)
+            let textColor = parent.textColor(from: attributes)
 
             if parent.selectedBlockStyle != blockStyle {
                 parent.selectedBlockStyle = blockStyle
@@ -2732,7 +3398,11 @@ private struct MemoBodyTextView: UIViewRepresentable {
                 parent.activeInlineStyles = inlineStyles
             }
 
-            textView.typingAttributes = parent.attributes(blockStyle: blockStyle, inlineStyles: inlineStyles)
+            if parent.activeTextColor != textColor {
+                parent.activeTextColor = textColor
+            }
+
+            textView.typingAttributes = parent.attributes(blockStyle: blockStyle, inlineStyles: inlineStyles, textColor: textColor)
         }
 
         private func selectionAttributes(
@@ -2783,5 +3453,14 @@ private struct MemoBodyTextView: UIViewRepresentable {
             return text.substring(with: NSRange(location: index, length: 1)) == "\n"
         }
 
+    }
+}
+
+extension MemoBodyTextView.RichTextView: UIGestureRecognizerDelegate {
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
     }
 }

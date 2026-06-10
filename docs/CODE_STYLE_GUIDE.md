@@ -121,6 +121,8 @@ Spacing:
 - Tapping the home floating create button starts from the original button shape: the entry first moves up `16` px with a subtle scale change, then morphs in place from the pink circular plus button into a white rounded create menu with Bezier-eased size, color, radius, opacity, and content reveal. While the menu is open, hide the separate floating create button; tapping the blank backdrop closes the menu. Menu options use existing memo categories and category icons, must show all five categories, and the content area should support vertical scrolling if constrained. Each create menu option is a full-width row with no default color block, a pressed light-gray background, a title plus auxiliary description capped at 20 Chinese characters, and an icon sized to the combined two-line text height.
 - Opening the home create menu must keep the bottom tab bar visible in its original position under the backdrop layer. Do not hide or fade the tab bar itself to simulate the backdrop.
 - Tapping another bottom tab while the home create menu is open should close the menu.
+- The first-level bottom tab bar is owned by the app container and remains mounted when switching Home, Categories, and Settings. Do not create a separate Home-only tab bar or remove/reinsert the bar during tab changes, because that causes flashing and drops the selection animation.
+- Home empty states use the `EmptyMemoState` asset at `160` pt. Center the empty state inside the memo scrolling region, not the full screen. A completely empty store shows `还没有便签` / `从第一条开始记录吧🥕`; an empty filtered category shows `暂无相关便签` / `添加便签后会显示在这里`.
 - On the home screen, the header, search area, category filter, and `我的便签` section header stay fixed while scrolling; only the memo card list scrolls, starting `12` px below the `我的便签` row.
 - Use `Ionicons` from `@expo/vector-icons`; do not hand-roll icons when a library icon exists.
 
@@ -133,6 +135,8 @@ Spacing:
 - The editor More entry uses a native `UIButton + UIMenu` bridge when SwiftUI `Menu` causes delayed highlight, shadow, or pressed-state artifacts.
 - Do not add visible wrapper containers around More/menu entries to fix interaction bugs.
 - The editor bottom function area stays compact until the user enters an editing/tool interaction.
+- In the inactive editor state, the bottom function area shows only the memo category chip. Activating title/body editing or opening an editor tool expands the same container from right to left, hides the category chip, and reveals the quick actions. Show six actions per visible width, allow horizontal scrolling for the remainder, omit dividers, and use circular selected states.
+- The expanded editor quick-action order starts with format and sticker, followed by todo and inline formatting actions. Keep the full format popup as the advanced formatting surface even when its common inline actions are duplicated in the toolbar.
 - Stickers in the editor must save with the memo and restore when the memo is reopened.
 - Sticker placement supports drag, scale, rotation, and long-press delete through a small delete bubble.
 - Sticker/text wrapping should preserve readability and avoid covering text; refine wrapping geometry without changing unrelated editor layout.
@@ -147,6 +151,10 @@ Spacing:
 - Editor rich-text formatting is scoped, not global: if body text is selected, apply the formatting only to the selected range; if there is no selection, apply it only to the paragraph containing the cursor, using line breaks as paragraph boundaries. If the cursor is on a new empty line, update only the editor's current typing attributes so the next input uses the selected style. Every style change must sync `UITextView.typingAttributes` for future typing.
 - Editor rich text uses a UIKit-backed `RichTextView` inside `UIViewRepresentable`. Store format state with `NSAttributedString.Key.font` and `.paragraphStyle`, plus lightweight custom tracking keys for block/inline state. Calculate line height with `ceil(max(font.lineHeight, font.pointSize * 1.25) / 4) * 4`, set it as both min/max paragraph line height, and apply baseline offset so text sits vertically centered in the line.
 - The editor caret must visually align with the active text style. `RichTextView.caretRect(for:)` should derive the active font from `typingAttributes` and center the caret inside the current line fragment, instead of relying on `textView.font` or a fixed cursor height.
+- Monospace is mutually exclusive with title, subtitle, caption, and body block styles, but remains compatible with bold, italic, underline, strikethrough, foreground color, and text background color.
+- A monospace input box uses 8pt padding on every side. Adjacent normal paragraphs must keep a visible 4pt gap from the gray box above or below; this rule also applies to a new empty caret line before any text is entered.
+- Tapping blank editor space below the last rendered block creates or focuses a paragraph at the document end. If the last block is monospace, the new paragraph must use body typing attributes and its caret must render below the gray box, never inside the monospace block.
+- Monospace background drawing is active only for characters and empty lines whose block style is monospace. Changing one line to another block style removes the gray background from that line without changing monospace blocks above or below it.
 
 ## Layout Rules
 

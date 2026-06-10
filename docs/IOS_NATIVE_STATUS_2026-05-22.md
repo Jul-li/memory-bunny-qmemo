@@ -56,6 +56,18 @@
 - Replaced the create-menu backdrop `Button` wrapper with a non-pressing display scrim plus transparent tap layer so tapping blank space does not feel like two separate close actions.
 - Current editor sticker behavior remains: insert sticker, preview from the picker, drag, scale, rotate, delete through long press bubble, wrap text around stickers, persist, and restore.
 
+## 2026-06-10 Update
+
+- Added the home empty state for both a completely empty memo store and an empty filtered category, using the provided `EmptyMemoState` asset and context-specific copy.
+- Consolidated the bottom tab bar at the app container level so switching between Home, Categories, and Settings keeps the bar visible and preserves its press/selection animation without flashing.
+- Expanded the editor bottom operation bar from the current category chip into six visible quick actions while editing, with format, sticker, todo, bold, italic, underline, strikethrough, and color controls available through horizontal scrolling.
+- Added text color choices for orange, blue, mint, pink, purple, and gray. Selected text and future typing receive the chosen foreground color and a 14% opacity background color.
+- Rebuilt rich-text behavior around the UIKit-backed `RichTextView`: block styles apply to the selected range or cursor paragraph, inline styles remain combinable, typing attributes stay synchronized, and formatted content persists for both new and existing memos.
+- Stabilized monospace editing as a paragraph format incompatible with title/subtitle/caption/body while remaining compatible with inline styles and colors.
+- Completed the first-stage monospace input box behavior: multiline growth, restore after reopening, paragraph splitting, no ghost lines, stable caret alignment, 8pt inner padding, and a persistent 4pt visual gap from adjacent normal paragraphs.
+- Added blank-area editing below existing content. If the last block is monospace, tapping below it creates a normal body paragraph, places the caret outside the gray input box, and preserves the same visual boundary spacing before text is entered.
+- Kept the existing editor transition, popup appearance, sticker behavior, and home interactions unchanged while fixing these editor-specific paths.
+
 ## Current Known State
 
 - `xcodebuild` succeeds with:
@@ -68,14 +80,13 @@
 
 - Continue visual parity checks against the React Native reference for any remaining homepage details.
 - Manually verify search result tapping in the simulator after future search changes.
-- Continue editor feature development: text color, bold, italic, richer text style controls, and sticker/text wrapping refinements.
-- Implement full rich text behavior behind the current format popup controls, including selected-range formatting and persistence.
-- Continue tuning the editor popup open/close motion against the sticker popup standard.
+- Continue editor feature development around todo behavior, richer paragraph operations, and edge-case coverage for persisted attributed text.
+- Refine sticker/text wrapping toward shape-aware paths without regressing sticker persistence or manipulation.
 - Build out the category page.
 - Build out the settings page.
 - Plan the App Store in-app purchase flow and product structure.
 - Decide final App Store bundle ID, display name, signing/capabilities, app icon set, screenshots, and privacy notes before submission.
-- Add real persistence and production delete confirmation in a later pass if not already covered by the native implementation.
+- Add data backup/migration and production-grade recovery checks before release.
 
 ## Working Rules
 

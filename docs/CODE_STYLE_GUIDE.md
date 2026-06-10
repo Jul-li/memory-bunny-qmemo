@@ -22,7 +22,7 @@ If a later user request repeats an existing rule with different details, replace
 
 ## Native iOS Structure
 
-- Active native branch: `ios-native`.
+- Active native branch: `main`; keep `ios-native` synchronized as the native development mirror.
 - Active native project: `NativeIOS/QMemoCute.xcodeproj`.
 - Native app code lives under `NativeIOS/QMemoCute/`.
 - Native visual assets live in `NativeIOS/QMemoCute/Assets.xcassets`; never depend on desktop-only source paths at runtime.

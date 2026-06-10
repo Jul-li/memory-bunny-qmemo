@@ -3,7 +3,7 @@
 ## Project Goal
 
 - QMemo Cute / 记忆兔备忘录 is moving from the React Native reference app to a native SwiftUI iOS app for App Store release.
-- Active branch: `ios-native`.
+- Active branch: `main`; `ios-native` remains synchronized as the native development mirror.
 - Native project: `NativeIOS/QMemoCute.xcodeproj`.
 - Main visual and code reference: `docs/CODE_STYLE_GUIDE.md` plus the existing React Native implementation under `app/` and `src/`.
 

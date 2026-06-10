@@ -6,7 +6,7 @@
 
 ## 2. 已确定的关键决策和方向
 
-- 当前主线：`ios-native` 分支，活跃工程为 `NativeIOS/QMemoCute.xcodeproj`。
+- 当前主线：`main` 分支，活跃工程为 `NativeIOS/QMemoCute.xcodeproj`；`ios-native` 保留为同步开发分支。
 - 技术方向：后续功能以原生 SwiftUI iOS 实现为主，React Native 代码作为历史参考和视觉/交互对照。
 - 数据方向：无后端、无登录，备忘录数据保存到手机本地。
 - 产品结构：首页和编辑页是当前重点；分类页、设置页、内购方案仍待继续建设。

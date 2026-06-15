@@ -25,6 +25,15 @@ If a later user request repeats an existing rule with different details, replace
 - Active native branch: `main`; keep `ios-native` synchronized as the native development mirror.
 - Active native project: `NativeIOS/QMemoCute.xcodeproj`.
 - Native app code lives under `NativeIOS/QMemoCute/`.
+- Keep `MemoEditorView.swift` focused on editor-page composition, state coordination, navigation, and persistence.
+- Editor support code is split by responsibility: shared editor models and commands in `MemoEditorTypes.swift`, format popup UI in `MemoEditorFormatPanel.swift`, sticker behavior in `MemoEditorStickers.swift`, the native More menu in `MemoEditorMoreMenu.swift`, and UIKit rich-text/monospace editing in `MemoRichTextView.swift`.
+- Basic todo-list editing lives in `TodoListEditorView.swift`. The Home create-menu `待办` route and existing `.todo` memos use this editor, while all other categories continue using `MemoEditorView`.
+- Todo items persist as structured `MemoTodoItem` values. Keep `Memo.content` synchronized as a plain-text checkbox summary so the existing home card and search behavior continue working until the planned home redesign.
+- Todo reminder scheduling lives in `TodoReminderManager.swift`. Keep date, time, and urgent controls in one native grouped section titled `时间与日期`; enabling urgent must also enable date and time, while disabling either required control must clear urgent.
+- Urgent todo reminders use AlarmKit system alarms on iOS 26 and later. Keep the deployment target compatible with older systems by falling back to local notifications, and cancel both alarm types when a reminder, todo memo, or todo item is removed.
+- Confirming the reminder sheet must persist the reminder immediately so alarm scheduling does not depend on a later editor dismissal or an additional save action.
+- Structural refactors must start with behavior-preserving mechanical extraction. Do not change layout values, animation timing, interaction state, attributed-text behavior, or persistence formats while moving code between files.
+- A feature-specific editor type should remain in its owning file instead of being added back to `MemoEditorView.swift`.
 - Native visual assets live in `NativeIOS/QMemoCute/Assets.xcassets`; never depend on desktop-only source paths at runtime.
 - Prefer SwiftUI for screens and layout, but use UIKit wrappers when native iOS behavior is more stable or more faithful to the intended interaction.
 - Keep native changes scoped to the requested behavior. Do not rewrite a working SwiftUI component only to solve a small visual bug.
@@ -155,6 +164,11 @@ Spacing:
 - A monospace input box uses 8pt padding on every side. Adjacent normal paragraphs must keep a visible 4pt gap from the gray box above or below; this rule also applies to a new empty caret line before any text is entered.
 - Tapping blank editor space below the last rendered block creates or focuses a paragraph at the document end. If the last block is monospace, the new paragraph must use body typing attributes and its caret must render below the gray box, never inside the monospace block.
 - Monospace background drawing is active only for characters and empty lines whose block style is monospace. Changing one line to another block style removes the gray background from that line without changing monospace blocks above or below it.
+- Todo reminders belong to individual `MemoTodoItem` records through an optional `reminderAt` date. Use the native iOS date/time picker and local `UNUserNotificationCenter` notifications; do not introduce a custom calendar control for the first-stage reminder flow.
+- Todo reminder date and time controls stay inside one non-dismissible-by-drag sheet. New reminders start with both switches off. Enabling date reveals the current month's inline calendar while time stays collapsed; enabling time automatically enables date with today selected, collapses the calendar, and reveals the inline time wheel. Date and time may remain enabled together, but only one picker panel is expanded at a time.
+- Todo rows do not expose a trailing delete action. Keep the trailing reminder button visually hidden and noninteractive unless that exact todo text field is currently being edited; preserve its layout space so multiline text does not reflow when focus changes.
+- Request notification permission only when the user confirms an actual future reminder. Saving an ordinary todo list with no reminders must not trigger the permission prompt.
+- Resynchronize a todo memo's pending notifications after it is saved. Completed items, empty items, removed reminders, past reminder times, deleted items, and deleted todo memos must not retain pending notifications.
 
 ## Layout Rules
 

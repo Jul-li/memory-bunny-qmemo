@@ -489,11 +489,20 @@ struct HomeView: View {
         let memo = route.memoID.flatMap { memoID in
             store.memos.first { $0.id == memoID }
         }
-        let editor = MemoEditorView(
-            category: route.category,
-            memo: memo,
-            navigationChrome: route.transition.usesExpandedNavigationChrome ? .cardExpanded : .native
-        )
+        let editor = Group {
+            if route.category == .todo {
+                TodoListEditorView(
+                    memo: memo,
+                    navigationChrome: route.transition.usesExpandedNavigationChrome ? .cardExpanded : .native
+                )
+            } else {
+                MemoEditorView(
+                    category: route.category,
+                    memo: memo,
+                    navigationChrome: route.transition.usesExpandedNavigationChrome ? .cardExpanded : .native
+                )
+            }
+        }
 
         if route.transition == .card, let memoID = route.memoID {
             if #available(iOS 18.0, *) {
@@ -595,6 +604,7 @@ struct HomeView: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("新建入口")
             }
         }
         .frame(
@@ -1160,6 +1170,7 @@ struct CreateMenuContentView: View {
                             )
                         }
                         .buttonStyle(CreateMenuRowStyle())
+                        .accessibilityLabel("新建\(category.title)")
                     }
                 }
             }

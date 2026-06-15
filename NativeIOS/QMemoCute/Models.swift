@@ -76,6 +76,50 @@ struct MemoSticker: Identifiable, Codable, Equatable {
     }
 }
 
+struct MemoTodoItem: Identifiable, Codable, Equatable {
+    var id: UUID
+    var text: String
+    var isCompleted: Bool
+    var createdAt: Date
+    var reminderAt: Date?
+    var isUrgent: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case text
+        case isCompleted
+        case createdAt
+        case reminderAt
+        case isUrgent
+    }
+
+    init(
+        id: UUID = UUID(),
+        text: String = "",
+        isCompleted: Bool = false,
+        createdAt: Date = Date(),
+        reminderAt: Date? = nil,
+        isUrgent: Bool = false
+    ) {
+        self.id = id
+        self.text = text
+        self.isCompleted = isCompleted
+        self.createdAt = createdAt
+        self.reminderAt = reminderAt
+        self.isUrgent = isUrgent
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        text = try container.decode(String.self, forKey: .text)
+        isCompleted = try container.decode(Bool.self, forKey: .isCompleted)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        reminderAt = try container.decodeIfPresent(Date.self, forKey: .reminderAt)
+        isUrgent = try container.decodeIfPresent(Bool.self, forKey: .isUrgent) ?? false
+    }
+}
+
 struct Memo: Identifiable, Codable, Equatable {
     var id: UUID
     var title: String
@@ -86,6 +130,7 @@ struct Memo: Identifiable, Codable, Equatable {
     var createdAt: Date
     var updatedAt: Date
     var stickers: [MemoSticker]
+    var todoItems: [MemoTodoItem]
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -97,6 +142,7 @@ struct Memo: Identifiable, Codable, Equatable {
         case createdAt
         case updatedAt
         case stickers
+        case todoItems
     }
 
     init(
@@ -108,7 +154,8 @@ struct Memo: Identifiable, Codable, Equatable {
         isPinned: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
-        stickers: [MemoSticker] = []
+        stickers: [MemoSticker] = [],
+        todoItems: [MemoTodoItem] = []
     ) {
         self.id = id
         self.title = title
@@ -119,6 +166,7 @@ struct Memo: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.stickers = stickers
+        self.todoItems = todoItems
     }
 
     init(from decoder: Decoder) throws {
@@ -132,5 +180,6 @@ struct Memo: Identifiable, Codable, Equatable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         stickers = try container.decodeIfPresent([MemoSticker].self, forKey: .stickers) ?? []
+        todoItems = try container.decodeIfPresent([MemoTodoItem].self, forKey: .todoItems) ?? []
     }
 }

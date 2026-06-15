@@ -15,6 +15,13 @@
 		A10000000000000000000006 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* HomeView.swift */; };
 		A10000000000000000000007 /* MemoEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* MemoEditorView.swift */; };
 		A10000000000000000000008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* Assets.xcassets */; };
+		A10000000000000000000010 /* MemoEditorTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* MemoEditorTypes.swift */; };
+		A10000000000000000000011 /* MemoEditorFormatPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* MemoEditorFormatPanel.swift */; };
+		A10000000000000000000012 /* MemoEditorStickers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* MemoEditorStickers.swift */; };
+		A10000000000000000000013 /* MemoEditorMoreMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* MemoEditorMoreMenu.swift */; };
+		A10000000000000000000014 /* MemoRichTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* MemoRichTextView.swift */; };
+		A10000000000000000000015 /* TodoListEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* TodoListEditorView.swift */; };
+		A10000000000000000000016 /* TodoReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* TodoReminderManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,6 +34,13 @@
 		A20000000000000000000007 /* MemoEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoEditorView.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A20000000000000000000009 /* QMemoCute.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QMemoCute.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000010 /* MemoEditorTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoEditorTypes.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* MemoEditorFormatPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoEditorFormatPanel.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* MemoEditorStickers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoEditorStickers.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* MemoEditorMoreMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoEditorMoreMenu.swift; sourceTree = "<group>"; };
+		A20000000000000000000014 /* MemoRichTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoRichTextView.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* TodoListEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListEditorView.swift; sourceTree = "<group>"; };
+		A20000000000000000000016 /* TodoReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoReminderManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,6 +72,13 @@
 				A20000000000000000000005 /* ContentView.swift */,
 				A20000000000000000000006 /* HomeView.swift */,
 				A20000000000000000000007 /* MemoEditorView.swift */,
+				A20000000000000000000010 /* MemoEditorTypes.swift */,
+				A20000000000000000000011 /* MemoEditorFormatPanel.swift */,
+				A20000000000000000000012 /* MemoEditorStickers.swift */,
+				A20000000000000000000013 /* MemoEditorMoreMenu.swift */,
+				A20000000000000000000014 /* MemoRichTextView.swift */,
+				A20000000000000000000015 /* TodoListEditorView.swift */,
+				A20000000000000000000016 /* TodoReminderManager.swift */,
 				A20000000000000000000008 /* Assets.xcassets */,
 			);
 			path = QMemoCute;
@@ -147,6 +168,13 @@
 				A10000000000000000000005 /* ContentView.swift in Sources */,
 				A10000000000000000000006 /* HomeView.swift in Sources */,
 				A10000000000000000000007 /* MemoEditorView.swift in Sources */,
+				A10000000000000000000010 /* MemoEditorTypes.swift in Sources */,
+				A10000000000000000000011 /* MemoEditorFormatPanel.swift in Sources */,
+				A10000000000000000000012 /* MemoEditorStickers.swift in Sources */,
+				A10000000000000000000013 /* MemoEditorMoreMenu.swift in Sources */,
+				A10000000000000000000014 /* MemoRichTextView.swift in Sources */,
+				A10000000000000000000015 /* TodoListEditorView.swift in Sources */,
+				A10000000000000000000016 /* TodoReminderManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -281,6 +309,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "QMemo Cute";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_FILE = QMemoCute/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -311,6 +340,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "QMemo Cute";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_FILE = QMemoCute/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

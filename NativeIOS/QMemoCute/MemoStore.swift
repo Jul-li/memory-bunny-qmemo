@@ -19,7 +19,8 @@ final class MemoStore: ObservableObject {
         richContentData: Data? = nil,
         category: MemoCategory,
         isPinned: Bool,
-        stickers: [MemoSticker] = []
+        stickers: [MemoSticker] = [],
+        todoItems: [MemoTodoItem] = []
     ) -> Memo {
         let memo = Memo(
             title: title,
@@ -27,7 +28,8 @@ final class MemoStore: ObservableObject {
             richContentData: richContentData,
             category: category,
             isPinned: isPinned,
-            stickers: stickers
+            stickers: stickers,
+            todoItems: todoItems
         )
         memos.append(memo)
         sortMemos()
@@ -40,7 +42,8 @@ final class MemoStore: ObservableObject {
         content: String,
         richContentData: Data? = nil,
         isPinned: Bool,
-        stickers: [MemoSticker]? = nil
+        stickers: [MemoSticker]? = nil,
+        todoItems: [MemoTodoItem]? = nil
     ) {
         guard let index = memos.firstIndex(where: { $0.id == memo.id }) else { return }
         memos[index].title = title
@@ -50,11 +53,22 @@ final class MemoStore: ObservableObject {
         if let stickers {
             memos[index].stickers = stickers
         }
+        if let todoItems {
+            memos[index].todoItems = todoItems
+        }
         memos[index].updatedAt = Date()
         sortMemos()
     }
 
     func delete(_ memo: Memo) {
+        if memo.category == .todo {
+            Task {
+                await TodoReminderManager.shared.cancelReminders(
+                    memoID: memo.id,
+                    items: memo.todoItems
+                )
+            }
+        }
         memos.removeAll { $0.id == memo.id }
     }
 

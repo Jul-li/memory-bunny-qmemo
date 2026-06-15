@@ -67,17 +67,40 @@
 - Completed the first-stage monospace input box behavior: multiline growth, restore after reopening, paragraph splitting, no ghost lines, stable caret alignment, 8pt inner padding, and a persistent 4pt visual gap from adjacent normal paragraphs.
 - Added blank-area editing below existing content. If the last block is monospace, tapping below it creates a normal body paragraph, places the caret outside the gray input box, and preserves the same visual boundary spacing before text is entered.
 - Kept the existing editor transition, popup appearance, sticker behavior, and home interactions unchanged while fixing these editor-specific paths.
+- Refactored the native editor without changing UI or behavior: `MemoEditorView.swift` now coordinates the page, while editor types, format popup, stickers, native More menu, and UIKit rich-text implementation live in dedicated files.
+- Added a maintenance rule that future structural refactors must use behavior-preserving extraction and must not combine file movement with visual, interaction, or persistence changes.
 
 ## Current Known State
 
 - `xcodebuild` succeeds with:
   `xcodebuild -project NativeIOS/QMemoCute.xcodeproj -scheme QMemoCute -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' build`
-- The AppIntents metadata warning is still present but non-blocking because the app does not currently depend on `AppIntents.framework`.
+- AppIntents metadata extraction completes without the previous missing-framework warning after the AlarmKit integration.
 - Local Xcode user state files are ignored and should not be committed.
 - A root `ios/QMemoCute.xcworkspace` exists locally but is not part of the active native project path; review before deciding whether to keep it.
 
+## 2026-06-11 Update
+
+- Added `MemoTodoItem` as the first structured todo-list model with stable identity, text, completion state, and creation time.
+- Added `TodoListEditorView` as the dedicated editor for the Home create-menu `待办` entry and existing `.todo` memos.
+- Basic todo lists now support adding and removing rows, completing individual items, confirming saves, local persistence, and restore after reopening.
+- Existing todo-category memo text is converted into list items by line when opened; structured items remain synchronized to `Memo.content` so the current Home cards and search continue working without layout changes.
+- Existing non-todo categories still use the original rich-text `MemoEditorView`; Home card layout was not changed.
+
+## 2026-06-12 Update
+
+- Added an optional reminder time to each structured todo item.
+- Todo rows now provide a native iOS date/time reminder sheet and show the selected reminder below the item text.
+- Future, incomplete, nonempty todo items schedule local notifications after saving; notification permission is requested only when the user confirms a reminder.
+- Removing a reminder, completing or deleting its item, or deleting the whole todo memo removes the corresponding pending notification.
+- Reminder values persist with todo data and restore when the editor is reopened.
+- Simplified reminder editing into one sheet with switch-controlled inline month and time pickers. Opening time automatically enables today's date and collapses the calendar, and the sheet no longer dismisses accidentally through a downward drag.
+- Grouped date, time, and urgent switches under the `时间与日期` heading. Enabling urgent turns on date and time and opens the time picker; disabling date or time clears urgent.
+- Urgent reminders use AlarmKit system alarms on iOS 26 and later, with the todo text shown as the alarm title. iOS 17 through iOS 25 continue using local notifications as the compatibility fallback.
+- Added the required AlarmKit usage description, persisted the urgent flag with old-data decoding compatibility, and made reminder-sheet confirmation persist and schedule immediately.
+
 ## Open Items
 
+- Follow `docs/DEVELOPMENT_ROADMAP.md` for the agreed todo, home redesign, calendar statistics, and mood-tracking sequence.
 - Continue visual parity checks against the React Native reference for any remaining homepage details.
 - Manually verify search result tapping in the simulator after future search changes.
 - Continue editor feature development around todo behavior, richer paragraph operations, and edge-case coverage for persisted attributed text.

@@ -16,6 +16,9 @@ struct TodoListEditorView: View {
     @State private var isDeleteConfirmationPresented = false
     @State private var isReminderPickerPresented = false
     @State private var isReminderPermissionAlertPresented = false
+    @State private var reminderAlertTitle = "无法开启提醒"
+    @State private var reminderAlertMessage = "请在系统设置中允许记忆兔使用通知或闹钟权限，然后重新设置提醒时间。"
+    @State private var reminderAlertShowsSettings = true
     @State private var reminderEditingItemID: UUID?
     @State private var reminderDraftDate = Date()
     @State private var reminderDraftIsUrgent = false
@@ -167,14 +170,16 @@ struct TodoListEditorView: View {
             .presentationDragIndicator(.visible)
             .interactiveDismissDisabled()
         }
-        .alert("无法开启提醒", isPresented: $isReminderPermissionAlertPresented) {
-            Button("前往设置") {
-                guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
-                UIApplication.shared.open(settingsURL)
+        .alert(reminderAlertTitle, isPresented: $isReminderPermissionAlertPresented) {
+            if reminderAlertShowsSettings {
+                Button("前往设置") {
+                    guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+                    UIApplication.shared.open(settingsURL)
+                }
             }
-            Button("取消", role: .cancel) {}
+            Button("知道了", role: .cancel) {}
         } message: {
-            Text("请在系统设置中允许记忆兔使用通知或闹钟权限，然后重新设置提醒时间。")
+            Text(reminderAlertMessage)
         }
         .onAppear {
             guard navigationChrome == .cardExpanded else { return }
@@ -243,13 +248,19 @@ struct TodoListEditorView: View {
                     Button {
                         presentReminderPicker(for: item.wrappedValue.id)
                     } label: {
-                        Label(
-                            reminderAt.formatted(date: .abbreviated, time: .shortened),
-                            systemImage: "bell.fill"
-                        )
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Theme.Colors.accentStrong)
-                        .padding(.bottom, 8)
+                        TimelineView(.periodic(from: .now, by: 30)) { timeline in
+                            Label(
+                                reminderAt.formatted(date: .abbreviated, time: .shortened),
+                                systemImage: "bell.fill"
+                            )
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(
+                                reminderAt > timeline.date
+                                    ? Theme.Colors.accentStrong
+                                    : Theme.Colors.muted
+                            )
+                            .padding(.bottom, 8)
+                        }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("修改提醒时间")
@@ -422,27 +433,55 @@ struct TodoListEditorView: View {
         guard let reminderEditingItemID else { return }
 
         Task {
+            let isUrgent = reminderDraftIsUrgent
             let isAuthorized = if reminderDraftIsUrgent {
                 await TodoReminderManager.shared.requestUrgentAuthorizationIfNeeded()
             } else {
                 await TodoReminderManager.shared.requestAuthorizationIfNeeded()
             }
-            await MainActor.run {
+            let schedulingContext = await MainActor.run { () -> (UUID, String, [MemoTodoItem])? in
                 guard isAuthorized else {
                     isReminderPickerPresented = false
+                    reminderAlertTitle = "无法开启提醒"
+                    reminderAlertMessage = "请在系统设置中允许记忆兔使用通知或闹钟权限，然后重新设置提醒时间。"
+                    reminderAlertShowsSettings = true
                     isReminderPermissionAlertPresented = true
-                    return
+                    return nil
                 }
 
                 guard let index = items.firstIndex(where: { $0.id == reminderEditingItemID }) else {
                     isReminderPickerPresented = false
-                    return
+                    return nil
                 }
 
                 items[index].reminderAt = reminderDraftDate
                 items[index].isUrgent = reminderDraftIsUrgent
+                guard let storedMemo = persistDraftIfNeeded(shouldSynchronizeReminders: false) else {
+                    isReminderPickerPresented = false
+                    return nil
+                }
+                return (storedMemo.id, storedMemo.title, items)
+            }
+
+            guard let schedulingContext else { return }
+            let report = await TodoReminderManager.shared.synchronize(
+                memoID: schedulingContext.0,
+                title: schedulingContext.1,
+                items: schedulingContext.2
+            )
+
+            await MainActor.run {
                 isReminderPickerPresented = false
-                persistDraftIfNeeded()
+
+                guard isUrgent, #available(iOS 26.0, *) else { return }
+                guard !report.systemAlarmWasScheduled(for: reminderEditingItemID) else { return }
+
+                let reason = report.failedSystemAlarms[reminderEditingItemID]
+                    ?? "系统没有返回对应的闹钟记录"
+                reminderAlertTitle = "系统闹钟设置失败"
+                reminderAlertMessage = "\(reason)。提醒时间已保留，并已尝试改用普通通知。"
+                reminderAlertShowsSettings = false
+                isReminderPermissionAlertPresented = true
             }
         }
     }
@@ -469,19 +508,28 @@ struct TodoListEditorView: View {
         }
     }
 
-    private func persistDraftIfNeeded() {
-        guard !shouldSkipPersistOnDisappear else { return }
-        guard memo != nil || hasEditableDraftContent else { return }
+    @discardableResult
+    private func persistDraftIfNeeded(
+        shouldSynchronizeReminders: Bool = true
+    ) -> Memo? {
+        guard !shouldSkipPersistOnDisappear else { return nil }
+        guard memo != nil || hasEditableDraftContent else { return nil }
 
         if editableStoredMemo() != nil {
-            persistExistingMemoIfNeeded()
+            return persistExistingMemoIfNeeded(
+                shouldSynchronizeReminders: shouldSynchronizeReminders
+            )
         } else {
-            createDraftMemoIfNeeded()
+            return createDraftMemoIfNeeded(
+                shouldSynchronizeReminders: shouldSynchronizeReminders
+            )
         }
     }
 
-    private func createDraftMemoIfNeeded() {
-        guard memo == nil, hasEditableDraftContent else { return }
+    private func createDraftMemoIfNeeded(
+        shouldSynchronizeReminders: Bool = true
+    ) -> Memo? {
+        guard memo == nil, hasEditableDraftContent else { return nil }
 
         let storedItems = nonemptyItems
         let createdMemo = store.create(
@@ -492,11 +540,19 @@ struct TodoListEditorView: View {
             todoItems: storedItems
         )
         savedDraftMemoID = createdMemo.id
-        synchronizeReminders(memoID: createdMemo.id, title: createdMemo.title, items: items)
+        if shouldSynchronizeReminders {
+            synchronizeReminders(memoID: createdMemo.id, title: createdMemo.title, items: items)
+        }
+        return createdMemo
     }
 
-    private func persistExistingMemoIfNeeded() {
-        guard !shouldSkipPersistOnDisappear, let storedMemo = editableStoredMemo() else { return }
+    @discardableResult
+    private func persistExistingMemoIfNeeded(
+        shouldSynchronizeReminders: Bool = true
+    ) -> Memo? {
+        guard !shouldSkipPersistOnDisappear, let storedMemo = editableStoredMemo() else {
+            return nil
+        }
 
         let storedItems = nonemptyItems
         let storedContent = Self.contentSummary(for: storedItems)
@@ -507,8 +563,10 @@ struct TodoListEditorView: View {
                 || storedItems != storedMemo.todoItems
 
         guard hasChanges else {
-            synchronizeReminders(memoID: storedMemo.id, title: storedMemo.title, items: items)
-            return
+            if shouldSynchronizeReminders {
+                synchronizeReminders(memoID: storedMemo.id, title: storedMemo.title, items: items)
+            }
+            return storedMemo
         }
 
         store.update(
@@ -520,7 +578,10 @@ struct TodoListEditorView: View {
             stickers: [],
             todoItems: storedItems
         )
-        synchronizeReminders(memoID: storedMemo.id, title: storedTitle, items: items)
+        if shouldSynchronizeReminders {
+            synchronizeReminders(memoID: storedMemo.id, title: storedTitle, items: items)
+        }
+        return editableStoredMemo()
     }
 
     private var storedTitle: String {

@@ -10,6 +10,7 @@
 - [x] Convert existing `待办` memo content into list items by line when it is first opened in the dedicated todo editor.
 - [x] Add optional date-time reminders for individual todo items using local notifications.
 - [x] Add urgent todo reminders using AlarmKit system alarms on iOS 26+, with local-notification fallback on older systems.
+- [x] Show the nearest active todo reminder as a live countdown in the existing Home card badge.
 - [ ] Add list-level scheduling, repeated tasks, subtasks, and priority after item reminders are stable.
 
 ## Home Information Architecture

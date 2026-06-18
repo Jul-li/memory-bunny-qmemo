@@ -97,6 +97,16 @@
 - Grouped date, time, and urgent switches under the `时间与日期` heading. Enabling urgent turns on date and time and opens the time picker; disabling date or time clears urgent.
 - Urgent reminders use AlarmKit system alarms on iOS 26 and later, with the todo text shown as the alarm title. iOS 17 through iOS 25 continue using local notifications as the compatibility fallback.
 - Added the required AlarmKit usage description, persisted the urgent flag with old-data decoding compatibility, and made reminder-sheet confirmation persist and schedule immediately.
+- Fixed urgent-alarm scheduling feedback: the editor now waits for AlarmKit synchronization, confirms the item ID exists in `AlarmManager.alarms`, and displays the real failure reason instead of silently treating a local-notification fallback as a successful system alarm.
+- AlarmKit alarms are app-owned system alarms and are not expected to be inserted into Apple's Clock app alarm list. Simulator verification covers authorization and registration only; the user performs final real-device alert verification.
+- Reminder time labels remain pink before their scheduled date, automatically switch to gray after the date passes, and stay tappable for rescheduling while the todo remains unfinished.
+
+## 2026-06-18 Update
+
+- Added a live Home-card countdown for the nearest future reminder belonging to a nonempty, incomplete todo item.
+- Countdown formatting is `X天` above 24 hours, `HH:MM` from 1 through 24 hours, and `MM:SS` below 1 hour; remaining seconds are rounded down so a newly entered two-minute reminder proceeds through `01:59` instead of displaying `00:02`.
+- Added the `TodoReminder` asset from the supplied alarm artwork. It replaces the todo icon while a reminder is active; pinned cards retain the pin icon without replacing the countdown text.
+- Verified the day, hour-minute, minute-second, pinned, and no-reminder paths in the iPhone 17 / iOS 26.5 simulator without changing the existing memo-card layout or interactions.
 
 ## Open Items
 

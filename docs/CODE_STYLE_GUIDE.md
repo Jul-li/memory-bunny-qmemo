@@ -32,6 +32,8 @@ If a later user request repeats an existing rule with different details, replace
 - Todo reminder scheduling lives in `TodoReminderManager.swift`. Keep date, time, and urgent controls in one native grouped section titled `时间与日期`; enabling urgent must also enable date and time, while disabling either required control must clear urgent.
 - Urgent todo reminders use AlarmKit system alarms on iOS 26 and later. Keep the deployment target compatible with older systems by falling back to local notifications, and cancel both alarm types when a reminder, todo memo, or todo item is removed.
 - Confirming the reminder sheet must persist the reminder immediately so alarm scheduling does not depend on a later editor dismissal or an additional save action.
+- Treat an urgent reminder as successfully scheduled only after `AlarmManager.schedule` returns and the same item ID exists in `AlarmManager.alarms`. Never swallow AlarmKit errors or silently present a notification fallback as a successful system alarm.
+- AlarmKit alarms belong to this app's AlarmManager client. Do not describe or test success by expecting them to appear in Apple's Clock app alarm list; verify registration through AlarmManager, then use a real device to verify the alert at the selected time.
 - Structural refactors must start with behavior-preserving mechanical extraction. Do not change layout values, animation timing, interaction state, attributed-text behavior, or persistence formats while moving code between files.
 - A feature-specific editor type should remain in its owning file instead of being added back to `MemoEditorView.swift`.
 - Native visual assets live in `NativeIOS/QMemoCute/Assets.xcassets`; never depend on desktop-only source paths at runtime.
@@ -167,8 +169,10 @@ Spacing:
 - Todo reminders belong to individual `MemoTodoItem` records through an optional `reminderAt` date. Use the native iOS date/time picker and local `UNUserNotificationCenter` notifications; do not introduce a custom calendar control for the first-stage reminder flow.
 - Todo reminder date and time controls stay inside one non-dismissible-by-drag sheet. New reminders start with both switches off. Enabling date reveals the current month's inline calendar while time stays collapsed; enabling time automatically enables date with today selected, collapses the calendar, and reveals the inline time wheel. Date and time may remain enabled together, but only one picker panel is expanded at a time.
 - Todo rows do not expose a trailing delete action. Keep the trailing reminder button visually hidden and noninteractive unless that exact todo text field is currently being edited; preserve its layout space so multiline text does not reflow when focus changes.
+- Todo reminder time text uses the theme pink accent while its date is still in the future and switches to the muted gray token after the date passes. Refresh this state while the editor remains visible, and keep an overdue reminder tappable so an unfinished todo can be rescheduled.
 - Request notification permission only when the user confirms an actual future reminder. Saving an ordinary todo list with no reminders must not trigger the permission prompt.
 - Resynchronize a todo memo's pending notifications after it is saved. Completed items, empty items, removed reminders, past reminder times, deleted items, and deleted todo memos must not retain pending notifications.
+- A Home todo card with a future reminder shows the nearest incomplete item's live countdown in the existing top-left category badge. Use `X天` above 24 hours, `HH:MM` from 1 hour through 24 hours, and `MM:SS` below 1 hour. Replace the todo badge icon with `TodoReminder`; when the card is pinned, only the icon changes to the existing pinned icon and the countdown text remains visible. Do not change the rest of the memo-card layout or behavior.
 
 ## Layout Rules
 

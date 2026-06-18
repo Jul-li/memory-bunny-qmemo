@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import UserNotifications
 #if canImport(AlarmKit)
 import AlarmKit
@@ -13,11 +14,38 @@ private struct TodoAlarmMetadata: AlarmMetadata {
 }
 #endif
 
+struct TodoReminderSyncReport {
+    var scheduledSystemAlarmIDs: Set<UUID> = []
+    var failedSystemAlarms: [UUID: String] = [:]
+
+    func systemAlarmWasScheduled(for itemID: UUID) -> Bool {
+        scheduledSystemAlarmIDs.contains(itemID)
+    }
+}
+
+private enum TodoSystemAlarmError: LocalizedError {
+    case authorizationDenied
+    case registrationMissing
+    case schedulingFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .authorizationDenied:
+            return "系统闹钟权限未开启"
+        case .registrationMissing:
+            return "系统没有保留刚创建的闹钟"
+        case .schedulingFailed(let message):
+            return "系统闹钟创建失败：\(message)"
+        }
+    }
+}
+
 final class TodoReminderManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = TodoReminderManager()
 
     private let center = UNUserNotificationCenter.current()
     private let identifierPrefix = "qmemo.todo."
+    private let logger = Logger(subsystem: "com.memorybunny.qmemo", category: "TodoReminder")
 
     private override init() {
         super.init()
@@ -64,7 +92,13 @@ final class TodoReminderManager: NSObject, UNUserNotificationCenterDelegate {
         #endif
     }
 
-    func synchronize(memoID: UUID, title: String, items: [MemoTodoItem]) async {
+    @discardableResult
+    func synchronize(
+        memoID: UUID,
+        title: String,
+        items: [MemoTodoItem]
+    ) async -> TodoReminderSyncReport {
+        var report = TodoReminderSyncReport()
         let prefix = reminderIdentifierPrefix(for: memoID)
         let pendingRequests = await center.pendingNotificationRequests()
         let existingIdentifiers = pendingRequests
@@ -87,29 +121,38 @@ final class TodoReminderManager: NSObject, UNUserNotificationCenterDelegate {
 
             return !item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        guard !scheduledItems.isEmpty else { return }
+        guard !scheduledItems.isEmpty else { return report }
 
         for item in scheduledItems {
             guard let reminderAt = item.reminderAt else { continue }
 
             if item.isUrgent, #available(iOS 26.0, *) {
-                if await scheduleSystemAlarm(
+                let result = await scheduleSystemAlarm(
                     memoID: memoID,
                     item: item,
                     reminderAt: reminderAt
-                ) {
+                )
+                switch result {
+                case .success:
+                    report.scheduledSystemAlarmIDs.insert(item.id)
                     continue
+                case .failure(let error):
+                    let message = error.localizedDescription
+                    report.failedSystemAlarms[item.id] = message
+                    logger.error("AlarmKit scheduling failed for item \(item.id, privacy: .public): \(message, privacy: .public)")
                 }
             }
 
             guard await requestAuthorizationIfNeeded() else { continue }
-            scheduleNotification(
+            await scheduleNotification(
                 memoID: memoID,
                 title: title,
                 item: item,
                 reminderAt: reminderAt
             )
         }
+
+        return report
     }
 
     func cancelReminders(memoID: UUID, items: [MemoTodoItem]) async {
@@ -137,27 +180,32 @@ final class TodoReminderManager: NSObject, UNUserNotificationCenterDelegate {
         title: String,
         item: MemoTodoItem,
         reminderAt: Date
-    ) {
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = item.text
-            content.sound = .default
-            content.userInfo = [
-                "memoID": memoID.uuidString,
-                "todoItemID": item.id.uuidString
-            ]
+    ) async {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = item.text
+        content.sound = .default
+        content.userInfo = [
+            "memoID": memoID.uuidString,
+            "todoItemID": item.id.uuidString
+        ]
 
-            let dateComponents = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute],
-                from: reminderAt
-            )
-            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
-            let request = UNNotificationRequest(
-                identifier: reminderIdentifier(memoID: memoID, itemID: item.id),
-                content: content,
-                trigger: trigger
-            )
-            center.add(request)
+        let dateComponents = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: reminderAt
+        )
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: reminderIdentifier(memoID: memoID, itemID: item.id),
+            content: content,
+            trigger: trigger
+        )
+
+        do {
+            try await center.add(request)
+        } catch {
+            logger.error("Notification fallback failed for item \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     @available(iOS 26.0, *)
@@ -165,9 +213,11 @@ final class TodoReminderManager: NSObject, UNUserNotificationCenterDelegate {
         memoID: UUID,
         item: MemoTodoItem,
         reminderAt: Date
-    ) async -> Bool {
+    ) async -> Result<Void, TodoSystemAlarmError> {
         #if canImport(AlarmKit)
-        guard await requestUrgentAuthorizationIfNeeded() else { return false }
+        guard await requestUrgentAuthorizationIfNeeded() else {
+            return .failure(.authorizationDenied)
+        }
 
         let alarmTitle = LocalizedStringResource(stringLiteral: item.text)
         let alert: AlarmPresentation.Alert
@@ -188,23 +238,38 @@ final class TodoReminderManager: NSObject, UNUserNotificationCenterDelegate {
             metadata: TodoAlarmMetadata(memoID: memoID, todoItemID: item.id),
             tintColor: .pink
         )
-        let configuration = AlarmManager.AlarmConfiguration.alarm(
+        let configuration = AlarmManager.AlarmConfiguration(
+            countdownDuration: nil,
             schedule: .fixed(reminderAt),
-            attributes: attributes
+            attributes: attributes,
+            sound: .default
         )
 
         do {
-            try? AlarmManager.shared.cancel(id: item.id)
-            _ = try await AlarmManager.shared.schedule(
+            let manager = AlarmManager.shared
+            try? manager.cancel(id: item.id)
+            let alarm = try await manager.schedule(
                 id: item.id,
                 configuration: configuration
             )
-            return true
+            guard alarm.id == item.id else {
+                return .failure(.registrationMissing)
+            }
+
+            if try manager.alarms.contains(where: { $0.id == item.id }) {
+                return .success(())
+            }
+
+            try await Task.sleep(for: .milliseconds(150))
+            guard try manager.alarms.contains(where: { $0.id == item.id }) else {
+                return .failure(.registrationMissing)
+            }
+            return .success(())
         } catch {
-            return false
+            return .failure(.schedulingFailed(error.localizedDescription))
         }
         #else
-        return false
+        return .failure(.schedulingFailed("当前系统不支持 AlarmKit"))
         #endif
     }
 

@@ -1050,16 +1050,29 @@ struct MemoCategoryBadge: View {
     let memo: Memo
 
     var body: some View {
+        if MemoReminderCountdown.nextReminder(in: memo, relativeTo: Date()) != nil {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                badge(at: context.date)
+            }
+        } else {
+            badge(at: Date())
+        }
+    }
+
+    @ViewBuilder
+    private func badge(at date: Date) -> some View {
+        let countdown = MemoReminderCountdown.text(for: memo, relativeTo: date)
+
         ZStack(alignment: .bottomLeading) {
             HStack(spacing: 6) {
                 if !memo.isPinned {
-                    Image(memo.category.iconAsset)
+                    Image(countdown == nil ? memo.category.iconAsset : "TodoReminder")
                         .resizable()
                         .scaledToFit()
                         .frame(width: 24, height: 24)
                 }
 
-                Text(memo.isPinned ? "置顶" : memo.category.title)
+                Text(countdown ?? (memo.isPinned ? "置顶" : memo.category.title))
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(Theme.Colors.text)
             }
@@ -1080,6 +1093,44 @@ struct MemoCategoryBadge: View {
             }
         }
         .frame(height: 36, alignment: .bottomLeading)
+        .accessibilityLabel(countdown.map { "距离提醒还有 \($0)" } ?? (memo.isPinned ? "置顶" : memo.category.title))
+    }
+}
+
+enum MemoReminderCountdown {
+    static func nextReminder(in memo: Memo, relativeTo date: Date) -> Date? {
+        guard memo.category == .todo else { return nil }
+
+        return memo.todoItems
+            .filter { !$0.isCompleted && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .compactMap(\.reminderAt)
+            .filter { $0 > date }
+            .min()
+    }
+
+    static func text(for memo: Memo, relativeTo date: Date) -> String? {
+        guard let reminderAt = nextReminder(in: memo, relativeTo: date) else { return nil }
+        return text(until: reminderAt, relativeTo: date)
+    }
+
+    static func text(until reminderAt: Date, relativeTo date: Date) -> String? {
+        let interval = reminderAt.timeIntervalSince(date)
+        guard interval > 0 else { return nil }
+
+        if interval > 24 * 60 * 60 {
+            return "\(Int(ceil(interval / (24 * 60 * 60))))天"
+        }
+
+        let totalSeconds = Int(interval)
+        if interval < 60 * 60 {
+            return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+        }
+
+        return String(
+            format: "%02d:%02d",
+            totalSeconds / (60 * 60),
+            (totalSeconds % (60 * 60)) / 60
+        )
     }
 }
 

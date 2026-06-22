@@ -22,6 +22,8 @@
 		A10000000000000000000014 /* MemoRichTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* MemoRichTextView.swift */; };
 		A10000000000000000000015 /* TodoListEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* TodoListEditorView.swift */; };
 		A10000000000000000000016 /* TodoReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* TodoReminderManager.swift */; };
+		A10000000000000000000017 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* StatisticsView.swift */; };
+		A10000000000000000000018 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -41,6 +43,9 @@
 		A20000000000000000000014 /* MemoRichTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoRichTextView.swift; sourceTree = "<group>"; };
 		A20000000000000000000015 /* TodoListEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListEditorView.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* TodoReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoReminderManager.swift; sourceTree = "<group>"; };
+		A20000000000000000000017 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000019 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,23 +70,98 @@
 		A40000000000000000000002 /* QMemoCute */ = {
 			isa = PBXGroup;
 			children = (
+				A40000000000000000000004 /* App */,
+				A40000000000000000000005 /* Core */,
+				A40000000000000000000006 /* Features */,
+				A4000000000000000000000C /* Resources */,
+			);
+			path = QMemoCute;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000004 /* App */ = {
+			isa = PBXGroup;
+			children = (
 				A20000000000000000000001 /* QMemoCuteApp.swift */,
+				A20000000000000000000005 /* ContentView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000005 /* Core */ = {
+			isa = PBXGroup;
+			children = (
 				A20000000000000000000002 /* Theme.swift */,
 				A20000000000000000000003 /* Models.swift */,
 				A20000000000000000000004 /* MemoStore.swift */,
-				A20000000000000000000005 /* ContentView.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000006 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				A40000000000000000000007 /* Home */,
+				A40000000000000000000008 /* Statistics */,
+				A40000000000000000000009 /* MemoEditor */,
+				A4000000000000000000000A /* Todo */,
+				A4000000000000000000000B /* Settings */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000007 /* Home */ = {
+			isa = PBXGroup;
+			children = (
 				A20000000000000000000006 /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000008 /* Statistics */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000017 /* StatisticsView.swift */,
+			);
+			path = Statistics;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000009 /* MemoEditor */ = {
+			isa = PBXGroup;
+			children = (
 				A20000000000000000000007 /* MemoEditorView.swift */,
 				A20000000000000000000010 /* MemoEditorTypes.swift */,
 				A20000000000000000000011 /* MemoEditorFormatPanel.swift */,
 				A20000000000000000000012 /* MemoEditorStickers.swift */,
 				A20000000000000000000013 /* MemoEditorMoreMenu.swift */,
 				A20000000000000000000014 /* MemoRichTextView.swift */,
+			);
+			path = MemoEditor;
+			sourceTree = "<group>";
+		};
+		A4000000000000000000000A /* Todo */ = {
+			isa = PBXGroup;
+			children = (
 				A20000000000000000000015 /* TodoListEditorView.swift */,
 				A20000000000000000000016 /* TodoReminderManager.swift */,
-				A20000000000000000000008 /* Assets.xcassets */,
 			);
-			path = QMemoCute;
+			path = Todo;
+			sourceTree = "<group>";
+		};
+		A4000000000000000000000B /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000018 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		A4000000000000000000000C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000008 /* Assets.xcassets */,
+				A20000000000000000000019 /* Info.plist */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		A40000000000000000000003 /* Products */ = {
@@ -175,6 +255,8 @@
 				A10000000000000000000014 /* MemoRichTextView.swift in Sources */,
 				A10000000000000000000015 /* TodoListEditorView.swift in Sources */,
 				A10000000000000000000016 /* TodoReminderManager.swift in Sources */,
+				A10000000000000000000017 /* StatisticsView.swift in Sources */,
+				A10000000000000000000018 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -309,7 +391,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "QMemo Cute";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_FILE = QMemoCute/Info.plist;
+				INFOPLIST_FILE = QMemoCute/Resources/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -340,7 +422,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "QMemo Cute";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_FILE = QMemoCute/Info.plist;
+				INFOPLIST_FILE = QMemoCute/Resources/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

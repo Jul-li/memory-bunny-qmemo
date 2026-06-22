@@ -10,7 +10,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: "备忘"
-        case .categories: "分类"
+        case .categories: "统计"
         case .settings: "设置"
         }
     }
@@ -43,7 +43,7 @@ struct ContentView: View {
                         isHomeOverlayPresented: $isHomeOverlayPresented
                     )
                 case .categories:
-                    CategorySummaryView()
+                    StatisticsView()
                 case .settings:
                     SettingsView()
                 }
@@ -376,51 +376,5 @@ struct CuteNativeTabItem: View {
             Capsule()
                 .stroke(isSelected ? Color(hex: "F7C6CD") : .clear, lineWidth: 1)
         )
-    }
-}
-
-struct CategorySummaryView: View {
-    @EnvironmentObject private var store: MemoStore
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(MemoCategory.allCases) { category in
-                    HStack(spacing: 12) {
-                        Image(category.iconAsset)
-                            .resizable()
-                            .frame(width: 30, height: 30)
-                        Text(category.title)
-                            .font(.headline)
-                        Spacer()
-                        Text("\(store.memos.filter { $0.category == category }.count)")
-                            .foregroundStyle(Theme.Colors.muted)
-                    }
-                    .listRowBackground(Theme.Colors.surface)
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Colors.background)
-            .navigationTitle("分类")
-        }
-        .padding(.bottom, 96)
-    }
-}
-
-struct SettingsView: View {
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("应用") {
-                    Label("本地备忘录", systemImage: "iphone")
-                    Label("无登录，无后端", systemImage: "lock.shield")
-                    Label("原生 SwiftUI 版本", systemImage: "swift")
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Colors.background)
-            .navigationTitle("设置")
-        }
-        .padding(.bottom, 96)
     }
 }

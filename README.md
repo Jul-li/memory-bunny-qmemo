@@ -1,50 +1,176 @@
 # 记忆兔 QMemo
 
-## 1. 项目背景和目标
+记忆兔是一款本地优先的 Q 版卡通备忘录 App。当前产品主线是原生 SwiftUI iOS App；仓库根目录仍保留 React Native / Expo 参考实现，用于历史对照和视觉、交互参考。
 
-记忆兔是一款面向年轻用户的 Q 版卡通风本地备忘录 App。当前重点是将原 React Native 参考实现迁移为原生 SwiftUI iOS App，为后续 App Store 上架做准备。目标是让用户无需登录注册，就能快速记录生活灵感、待办事项、学习笔记和日常碎片，并通过柔和配色、圆润卡片、可爱图标、贴纸和轻量交互，营造像随身手账一样的记录体验。
+## 本地路径
 
-## 2. 已确定的关键决策和方向
+- 仓库根目录：`/Users/liy/Documents/GitHub/memory-bunny-qmemo`
+- 原生 iOS 目录：`/Users/liy/Documents/GitHub/memory-bunny-qmemo/NativeIOS`
+- 原生业务代码：`/Users/liy/Documents/GitHub/memory-bunny-qmemo/NativeIOS/QMemoCute`
+- Xcode 工程：`/Users/liy/Documents/GitHub/memory-bunny-qmemo/NativeIOS/QMemoCute.xcodeproj`
+- 原生资源目录：`/Users/liy/Documents/GitHub/memory-bunny-qmemo/NativeIOS/QMemoCute/Resources/Assets.xcassets`
 
-- 当前主线：`main` 分支，活跃工程为 `NativeIOS/QMemoCute.xcodeproj`；`ios-native` 保留为同步开发分支。
-- 技术方向：后续功能以原生 SwiftUI iOS 实现为主，React Native 代码作为历史参考和视觉/交互对照。
-- 数据方向：无后端、无登录，备忘录数据保存到手机本地。
-- 产品结构：首页和编辑页是当前重点；分类页、设置页、内购方案仍待继续建设。
-- 视觉方向：Q 版卡通、奶油黄背景、浅粉/薄荷绿/天空蓝等柔和色，卡片大圆角和轻阴影。
-- 资源方向：运行时资源必须进入 `NativeIOS/QMemoCute/Assets.xcassets`，不能依赖桌面临时路径。
-- 交互方向：首页支持搜索、分类筛选、空状态、卡片列表、稳定底部导航和新建入口展开动画；编辑页支持富文本、等宽输入框、颜色、贴纸插入与保存恢复。
-- 规范方向：`docs/CODE_STYLE_GUIDE.md` 是后续样式、字体、间距和交互修改的统一规范来源。
+本地绝对路径只用于当前开发环境定位。代码和文档中的工程引用应使用仓库相对路径。
 
-## 3. 当前进度
+## 技术栈
 
-- 首页核心交互已具备：搜索、分类筛选、便签卡片、置顶重排、空状态、滚动效果、新建入口和三栏底部导航。
-- 编辑页已支持标题/副标题/小标题/正文/等宽段落，选区与光标段落独立格式化，格式保存与恢复。
-- 行内格式已支持加粗、倾斜、下划线、删除线、文字颜色和 14% 透明度文字背景色。
-- 等宽输入框已支持多行自适应、保存恢复、段落拆分、上下左右内边距，以及与普通段落和空白光标行的稳定间距。
-- 贴纸支持选择、插入、拖动、缩放、旋转、长按删除、文字环绕、保存与恢复。
-- 删除便签已有二次确认；编辑页工具栏会在激活编辑时展开快捷格式操作。
-- 原生编辑器已按页面协调、共享类型、格式弹窗、贴纸、更多菜单和 UIKit 富文本能力拆分为独立文件，后续功能应继续放入对应职责模块。
-- 首页新建入口选择待办时会进入独立 Todo List 编辑页，支持基础条目新增、删除、完成切换、保存恢复、单条待办日期时间提醒，并兼容已有待办分类文本。
-- 待办提醒已支持普通本地通知和 iOS 26+ AlarmKit 紧急闹钟；首页待办卡片会显示最近一条有效提醒的实时倒计时，并在提醒存在时使用闹钟图标。
+### 原生 iOS 主线
 
-## 4. 未解决问题和下一步
+- Swift 5
+- SwiftUI 为主要页面和布局技术
+- UIKit 用于富文本编辑、原生菜单等桥接能力
+- `ObservableObject` / `EnvironmentObject` 管理本地便签状态
+- `Codable` + `UserDefaults` 保存便签数据
+- UserNotifications 提供普通本地通知
+- iOS 26+ 使用 AlarmKit 提供紧急提醒，并为旧系统保留通知回退
+- 最低部署版本：iOS 17.0
+- Bundle ID：`com.memorybunny.qmemo`
 
-- 待办基础数据模型、持久化、新增/编辑/完成闭环及单条待办日期时间提醒已完成第一阶段，下一步继续完善优先级、重复任务和其它进阶交互。
-- AlarmKit 紧急提醒仍需持续进行真机到点触发验证；模拟器只用于注册、权限、回退和界面路径检查。
-- 待办稳定后重新规划首页，并将分类一级页面逐步改造成日历统计页面。
-- 后续增加手动心情记录、日历心情状态及可确认的本地心情推测。
-- 完成分类页和设置页的核心功能。
-- 增加清空确认、数据迁移/备份和更多异常状态处理。
-- 规划内购商品结构与恢复购买流程。
-- 整理 App Store 的 bundle ID、签名能力、隐私说明、截图、审核文案和上架材料。
+### 参考实现
 
-完整开发顺序见 `docs/DEVELOPMENT_ROADMAP.md`。
+- Expo 54、React Native 0.81、React 19
+- Expo Router、TypeScript、Expo SQLite
+- Node.js 依赖以 `package-lock.json` 为准
 
-## 5. 更新日志
+## 目录结构
 
-### 2026-06-18
+```text
+memory-bunny-qmemo/
+├── NativeIOS/
+│   ├── QMemoCute.xcodeproj/       # 当前原生 Xcode 工程
+│   └── QMemoCute/
+│       ├── App/                    # App 入口、根页面和一级导航
+│       ├── Core/                   # Model、MemoStore、Theme
+│       ├── Features/
+│       │   ├── Home/               # 首页、搜索、筛选和便签卡片
+│       │   ├── MemoEditor/         # 普通便签及富文本、贴纸编辑
+│       │   ├── Todo/               # 待办编辑和提醒调度
+│       │   ├── Statistics/         # 日历与统计页面
+│       │   └── Settings/           # 设置页面
+│       └── Resources/              # Assets.xcassets 和 Info.plist
+├── app/                            # Expo Router 参考入口
+├── docs/                           # 规范、路线图和上架资料
+├── package.json                    # Expo 参考实现依赖与脚本
+└── README.md
+```
 
-- 强化 AlarmKit 调度结果校验：只有系统返回并保留相同待办 ID 的闹钟才视为成功，失败时展示真实原因并尝试普通通知回退。
-- 提醒时间到期后由粉色自动变为灰色，并保持可点击以便重新设置。
-- 首页待办卡片左上角标签联动最近一条未完成提醒：超过 24 小时显示 `X天`，1 至 24 小时显示 `HH:MM`，不足 1 小时显示 `MM:SS`。
-- 有效提醒使用闹钟图标；置顶卡片只替换为置顶图标，倒计时文字继续保留，卡片其它布局和交互不变。
+## 安装与运行
+
+### 原生 iOS
+
+原生工程当前没有 CocoaPods 或 Swift Package 依赖，不需要执行额外的依赖安装。
+
+1. 安装 Xcode，并确保命令行工具指向所用版本：
+
+   ```bash
+   xcode-select -p
+   xcodebuild -version
+   ```
+
+2. 打开工程：
+
+   ```bash
+   cd /Users/liy/Documents/GitHub/memory-bunny-qmemo/NativeIOS
+   open QMemoCute.xcodeproj
+   ```
+
+3. 在 Xcode 中选择 `QMemoCute` scheme 和可用 iPhone 模拟器，按 `Command-R` 运行。
+
+命令行构建：
+
+```bash
+cd /Users/liy/Documents/GitHub/memory-bunny-qmemo/NativeIOS
+xcodebuild clean build \
+  -project QMemoCute.xcodeproj \
+  -scheme QMemoCute \
+  -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath /tmp/QMemoCuteDerivedData \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+2026-06-22 已使用 Xcode 26.5 和 iPhone 17 / iOS 26.5 模拟器完成 clean build、安装、启动及统计页交互验证。
+
+### Expo 参考实现
+
+```bash
+cd /Users/liy/Documents/GitHub/memory-bunny-qmemo
+npm ci
+npm run typecheck
+npm start
+```
+
+原生功能开发不应同时修改 Expo 参考实现，除非任务明确要求同步。
+
+## 测试
+
+当前 Xcode 工程只有 `QMemoCute` App Target，尚未配置单元测试或 UI 测试 Target。因此目前不能把 `xcodebuild test` 作为有效验证。
+
+每次原生改动至少需要：
+
+1. 执行 `xcodebuild clean build`。
+2. 在目标模拟器或真机启动 App。
+3. 验证本次修改对应的完整交互路径。
+4. 回归本次修改触及的既有交互。
+5. AlarmKit 到点触发必须使用支持该能力的真机验证。
+
+TODO：创建 `QMemoCuteTests` 和 `QMemoCuteUITests` Target，并补充稳定的 `xcodebuild test` 命令。
+
+## 当前进度
+
+### 已完成或已有实现
+
+- 首页搜索、分类筛选、空状态、便签卡片列表、置顶重排和删除确认。
+- 普通便签创建、编辑、删除及本地保存。
+- 标题、正文、段落样式和多种行内富文本格式。
+- 贴纸插入、拖动、缩放、旋转、删除、保存和恢复。
+- 独立待办编辑器、完成状态、日期时间提醒和保存恢复。
+- 普通本地通知，以及 iOS 26+ AlarmKit 紧急提醒和失败回退。
+- 首页最近待办提醒倒计时。
+- 日历统计页的月份切换、日期标记、汇总指标、周趋势和分类统计。
+- 设置一级页面的基础结构。
+- 原生代码已按 `App/Core/Features/Resources` 重新组织。
+
+### 待办事项
+
+- 增加日期详情页。
+- 完善待办优先级、重复任务等进阶能力。
+- 持续进行 AlarmKit 真机到点触发验证。
+- 完善设置页、清空确认、数据迁移和备份。
+- 增加单元测试与 UI 测试 Target。
+- 规划内购、恢复购买及 App Store 上架材料。
+
+详细顺序见 [`docs/DEVELOPMENT_ROADMAP.md`](docs/DEVELOPMENT_ROADMAP.md)。无法从当前代码确认的计划应保留为 `TODO`，不能写成已完成功能。
+
+## 常见问题与调试
+
+### Xcode 找不到文件或资源
+
+确认文件位于 `NativeIOS/QMemoCute/` 的当前分层目录中，并同时检查 `project.pbxproj` 的 group、file reference、target membership 和 build phase。资源只能从 `Resources/Assets.xcassets` 使用，不能依赖桌面临时路径。
+
+### App 首次启动出现四条示例便签
+
+这是 `MemoStore.seedMemos` 的当前行为。便签以 key `qmemo.native.memos` 编码后写入 `UserDefaults`。
+
+### 修改后仍显示旧数据或旧界面
+
+先确认运行的是 `NativeIOS/QMemoCute.xcodeproj` 的 `QMemoCute` scheme。必要时清理 DerivedData，并重新安装 App。删除模拟器 App 会同时清除其本地 `UserDefaults` 数据。
+
+### 提醒没有触发
+
+- 检查通知权限和提醒时间是否在未来。
+- 模拟器只用于界面、权限、注册和通知回退路径。
+- AlarmKit 紧急提醒必须在真机验证到点触发。
+- AlarmKit 成功状态应通过本 App 的 `AlarmManager` 查询，不应以系统时钟 App 是否出现条目为依据。
+
+### 查看运行日志
+
+在 Xcode Debug Console 中查看日志，或针对已启动模拟器执行：
+
+```bash
+xcrun simctl spawn booted log stream \
+  --level debug \
+  --predicate 'process == "QMemoCute"'
+```
+
+协作规则见 [`AGENTS.md`](AGENTS.md)，编码规则见 [`docs/coding-rules.md`](docs/coding-rules.md)，贡献流程见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。

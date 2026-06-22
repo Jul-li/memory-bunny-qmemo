@@ -25,6 +25,7 @@ If a later user request repeats an existing rule with different details, replace
 - Active native branch: `main`; keep `ios-native` synchronized as the native development mirror.
 - Active native project: `NativeIOS/QMemoCute.xcodeproj`.
 - Native app code lives under `NativeIOS/QMemoCute/`.
+- Native source layout is organized by responsibility: app entry and shared tab shell in `App/`, models/store/theme in `Core/`, page and feature code in `Features/<FeatureName>/`, and the asset catalog plus Info.plist in `Resources/`. Keep new files in the owning folder and update Xcode groups, file references, target membership, and build settings whenever files move.
 - Keep `MemoEditorView.swift` focused on editor-page composition, state coordination, navigation, and persistence.
 - Editor support code is split by responsibility: shared editor models and commands in `MemoEditorTypes.swift`, format popup UI in `MemoEditorFormatPanel.swift`, sticker behavior in `MemoEditorStickers.swift`, the native More menu in `MemoEditorMoreMenu.swift`, and UIKit rich-text/monospace editing in `MemoRichTextView.swift`.
 - Basic todo-list editing lives in `TodoListEditorView.swift`. The Home create-menu `待办` route and existing `.todo` memos use this editor, while all other categories continue using `MemoEditorView`.
@@ -173,6 +174,9 @@ Spacing:
 - Request notification permission only when the user confirms an actual future reminder. Saving an ordinary todo list with no reminders must not trigger the permission prompt.
 - Resynchronize a todo memo's pending notifications after it is saved. Completed items, empty items, removed reminders, past reminder times, deleted items, and deleted todo memos must not retain pending notifications.
 - A Home todo card with a future reminder shows the nearest incomplete item's live countdown in the existing top-left category badge. Use `X天` above 24 hours, `HH:MM` from 1 hour through 24 hours, and `MM:SS` below 1 hour. Replace the todo badge icon with `TodoReminder`; when the card is pinned, only the icon changes to the existing pinned icon and the countdown text remains visible. Do not change the rest of the memo-card layout or behavior.
+- The former `分类` first-level tab is named `统计` and is implemented by `StatisticsView.swift`. Keep the existing shared bottom tab bar mounted and do not change Home while developing this page.
+- The Statistics page uses local `MemoStore` data and follows this section order: compact `日历统计` header, month switcher, monthly calendar, four summary metrics, selected-week trend, and per-category totals. Month navigation and calendar-day selection must update the related statistics without introducing a backend or duplicate persistence layer.
+- Statistics cards reuse the existing cream background, white surfaces, large rounded corners, soft shadows, category assets, and theme tokens. The supplied calendar mockup is a layout reference, not a source for copying unavailable decorative assets or adding a back button to this first-level tab.
 
 ## Layout Rules
 

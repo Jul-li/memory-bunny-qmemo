@@ -107,6 +107,7 @@
 - Countdown formatting is `X天` above 24 hours, `HH:MM` from 1 through 24 hours, and `MM:SS` below 1 hour; remaining seconds are rounded down so a newly entered two-minute reminder proceeds through `01:59` instead of displaying `00:02`.
 - Added the `TodoReminder` asset from the supplied alarm artwork. It replaces the todo icon while a reminder is active; pinned cards retain the pin icon without replacing the countdown text.
 - Verified the day, hour-minute, minute-second, pinned, and no-reminder paths in the iPhone 17 / iOS 26.5 simulator without changing the existing memo-card layout or interactions.
+- Reorganized the native Xcode project into `App`, `Core`, feature-specific folders under `Features`, and `Resources`. The move preserves source contents and target membership; `SettingsView` was mechanically extracted from `ContentView` into its owning feature file.
 
 ## Open Items
 

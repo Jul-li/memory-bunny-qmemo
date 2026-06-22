@@ -23,9 +23,9 @@
 
 ## Calendar And Statistics
 
-- [ ] Replace the current category first-level page with a calendar/statistics page.
-- [ ] Mark dates that contain memo or todo records.
-- [ ] Show monthly record days, memo count, todo count, and completed todo count.
+- [x] Replace the current category first-level page with a calendar/statistics page and rename its tab to `统计`.
+- [x] Mark dates that contain memo or todo records.
+- [x] Show monthly record days, memo count, completed todo count, weekly trend, and category totals.
 - [ ] Open a daily detail view containing that day's memos and todos.
 
 ## Mood Tracking

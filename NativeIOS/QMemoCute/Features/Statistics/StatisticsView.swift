@@ -2,12 +2,22 @@ import SwiftUI
 
 struct StatisticsView: View {
     @EnvironmentObject private var store: MemoStore
+    @AppStorage("statisticsStreakIconAnimationDay") private var lastStreakIconAnimationDay = ""
+    @Binding var isTabBarHidden: Bool
+    @Namespace private var categoryTransitionNamespace
+
+    private let statisticsEntryID: UUID
 
     @State private var selectedMonth: Date
     @State private var selectedDate: Date
     @State private var selectedWeekDate: Date
+    @State private var navigationPath: [MemoCategory] = []
     @State private var calendarDragOffset: CGFloat = 0
     @State private var isCompletingMonthSwipe = false
+    @State private var displayedStreakIconAsset = "StatsStreak0"
+    @State private var streakIconScale: CGFloat = 1
+    @State private var animatedStreakEntryID: UUID?
+    @State private var streakIconAnimationID = UUID()
 
     private let calendar: Calendar
     private let weekdayTitles = ["一", "二", "三", "四", "五", "六", "日"]
@@ -21,7 +31,10 @@ struct StatisticsView: View {
         Theme.Colors.cream
     ]
 
-    init() {
+    init(isTabBarHidden: Binding<Bool>, entryID: UUID) {
+        _isTabBarHidden = isTabBarHidden
+        statisticsEntryID = entryID
+
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "zh_CN")
         calendar.firstWeekday = 2
@@ -34,24 +47,61 @@ struct StatisticsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
-            header
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
+        NavigationStack(path: $navigationPath) {
+            VStack(spacing: 6) {
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
 
-            ScrollView {
-                VStack(spacing: 14) {
-                    calendarCard
-                    metricGrid
-                    weeklyTrendCard
-                    categoryStatisticsCard
+                ScrollView {
+                    VStack(spacing: 14) {
+                        calendarCard
+                        metricGrid
+                        weeklyTrendCard
+                        categoryStatisticsCard
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 132)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 132)
+                .scrollIndicators(.hidden)
             }
-            .scrollIndicators(.hidden)
+            .background(Theme.Colors.background.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: MemoCategory.self) { category in
+                categoryDestination(category)
+            }
         }
+        .onChange(of: navigationPath) { _, path in
+            isTabBarHidden = !path.isEmpty
+        }
+        .onChange(of: statisticsEntryID) {
+            playStreakEntryAnimationIfNeeded()
+        }
+        .onAppear {
+            playStreakEntryAnimationIfNeeded()
+        }
+        .onDisappear {
+            isTabBarHidden = false
+        }
+    }
+
+    @ViewBuilder
+    private func categoryDestination(_ category: MemoCategory) -> some View {
+        let detail = StatisticsCategoryDetailView(
+            category: category,
+            month: selectedMonth,
+            calendar: calendar
+        )
         .background(Theme.Colors.background.ignoresSafeArea())
+        .windowBackground(UIColor(Theme.Colors.background))
+        .disablesNavigationDragDismiss()
+
+        if #available(iOS 18.0, *) {
+            detail
+                .navigationTransition(.zoom(sourceID: category.id, in: categoryTransitionNamespace))
+        } else {
+            detail
+        }
     }
 
     private var header: some View {
@@ -216,38 +266,40 @@ struct StatisticsView: View {
 
     private var metricGrid: some View {
         HStack(spacing: 6) {
-            metricCard(title: "本月记录", value: "\(monthlyRecordDays) 天", icon: "calendar.badge.checkmark", tint: Theme.Colors.pink)
-            metricCard(title: "连续记录", value: "\(recordingStreak) 天", icon: "flame.fill", tint: Theme.Colors.cream)
-            metricCard(title: "新增便签", value: "\(monthMemos.count) 条", icon: "square.and.pencil", tint: Theme.Colors.mint)
-            metricCard(title: "完成待办", value: "\(completedTodoCount) 项", icon: "checkmark.circle.fill", tint: Theme.Colors.sky)
+            metricCard(title: "本月记录", value: "\(monthlyRecordDays) 天", iconAsset: "StatsMonthlyRecord", tint: Theme.Colors.pink)
+            metricCard(title: "连续记录", value: "\(recordingStreak) 天", iconAsset: displayedStreakIconAsset, tint: Theme.Colors.cream, iconScale: streakIconScale)
+            metricCard(title: "完成待办", value: "\(completedTodoCount) 项", iconAsset: "StatsCompletedTodo", tint: Theme.Colors.sky)
         }
         .padding(10)
         .statisticsCard()
     }
 
-    private func metricCard(title: String, value: String, icon: String, tint: Color) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Theme.Colors.text.opacity(0.84))
-                .frame(width: 30, height: 30)
-                .background(tint.opacity(0.68))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    private func metricCard(title: String, value: String, iconAsset: String, tint: Color, iconScale: CGFloat = 1) -> some View {
+        HStack(spacing: 8) {
+            Image(iconAsset)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 34, height: 34)
+                .scaleEffect(iconScale)
 
-            Text(title)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(Theme.Colors.muted)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Theme.Colors.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
-            Text(value)
-                .font(.system(size: 15, weight: .black))
-                .foregroundStyle(Theme.Colors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                Text(value)
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(Theme.Colors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 78)
+        .frame(height: 64)
+        .padding(.horizontal, 10)
         .background(tint.opacity(0.25))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
@@ -356,44 +408,53 @@ struct StatisticsView: View {
         let count = monthMemos.filter { $0.category == category }.count
         let maximum = max(1, categoryMaximumCount)
 
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(category.iconAsset)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 28, height: 28)
+        return NavigationLink(value: category) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(category.iconAsset)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 28, height: 28)
 
-                Text(category.title)
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(Theme.Colors.text)
+                    Text(category.title)
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(Theme.Colors.text)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                Text("\(count) 条")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Theme.Colors.muted)
-            }
+                    Text("\(count) 条")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.Colors.muted)
 
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Theme.Colors.line.opacity(0.48))
-
-                    Capsule()
-                        .fill(category.tint)
-                        .frame(width: geometry.size.width * CGFloat(count) / CGFloat(maximum))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundStyle(Theme.Colors.muted.opacity(0.78))
                 }
+
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Theme.Colors.line.opacity(0.48))
+
+                        Capsule()
+                            .fill(category.tint)
+                            .frame(width: geometry.size.width * CGFloat(count) / CGFloat(maximum))
+                    }
+                }
+                .frame(height: 7)
             }
-            .frame(height: 7)
+            .padding(12)
+            .frame(minHeight: 76)
+            .background(category.tint.opacity(0.16))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(.white, lineWidth: 1)
+            )
+            .statisticsCategoryTransitionSource(for: category.id, in: categoryTransitionNamespace)
         }
-        .padding(12)
-        .frame(minHeight: 76)
-        .background(category.tint.opacity(0.16))
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(.white, lineWidth: 1)
-        )
+        .buttonStyle(StatisticsPressStyle())
+        .accessibilityLabel("\(monthTitle)，\(category.title)，\(count)条便签")
     }
 
     private func statisticsSectionTitle(_ title: String, systemName: String) -> some View {
@@ -478,6 +539,81 @@ struct StatisticsView: View {
             cursor = previousDay
         }
         return streak
+    }
+
+    private var streakIconAsset: String {
+        switch recordingStreak {
+        case 0:
+            return "StatsStreak0"
+        case 1..<7:
+            return "StatsStreak1"
+        case 7..<12:
+            return "StatsStreak2"
+        case 12..<15:
+            return "StatsStreak3"
+        default:
+            return "StatsStreak4"
+        }
+    }
+
+    private var streakAnimationDayKey: String {
+        let components = calendar.dateComponents([.year, .month, .day], from: Date())
+        return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
+    }
+
+    private func playStreakEntryAnimationIfNeeded() {
+        let targetIconAsset = streakIconAsset
+        guard animatedStreakEntryID != statisticsEntryID else {
+            displayedStreakIconAsset = targetIconAsset
+            streakIconScale = 1
+            return
+        }
+
+        animatedStreakEntryID = statisticsEntryID
+        streakIconAnimationID = UUID()
+        let animationID = streakIconAnimationID
+
+        guard targetIconAsset != "StatsStreak0" else {
+            displayedStreakIconAsset = "StatsStreak0"
+            streakIconScale = 1
+            return
+        }
+
+        guard lastStreakIconAnimationDay != streakAnimationDayKey else {
+            displayedStreakIconAsset = targetIconAsset
+            streakIconScale = 1
+            return
+        }
+
+        lastStreakIconAnimationDay = streakAnimationDayKey
+
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            displayedStreakIconAsset = "StatsStreak0"
+            streakIconScale = 1
+        }
+
+        DispatchQueue.main.async {
+            guard streakIconAnimationID == animationID else { return }
+            withAnimation(.easeIn(duration: 0.16)) {
+                streakIconScale = 0
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.17) {
+            guard streakIconAnimationID == animationID else { return }
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                displayedStreakIconAsset = targetIconAsset
+                streakIconScale = 0
+            }
+
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+                streakIconScale = 1
+            }
+        }
     }
 
     private var weekDates: [Date] {
@@ -643,6 +779,346 @@ struct StatisticsView: View {
     }
 }
 
+private struct StatisticsCategoryDetailView: View {
+    @EnvironmentObject private var store: MemoStore
+    @Environment(\.dismiss) private var dismiss
+    @Namespace private var memoTransitionNamespace
+
+    let category: MemoCategory
+    let month: Date
+    let calendar: Calendar
+
+    private var categoryMemos: [Memo] {
+        store.memos
+            .filter { memo in
+                memo.category == category && monthInterval.contains(memo.createdAt)
+            }
+            .sorted { lhs, rhs in
+                lhs.createdAt > rhs.createdAt
+            }
+    }
+
+    private var monthInterval: DateInterval {
+        calendar.dateInterval(of: .month, for: month)
+            ?? DateInterval(start: month, duration: 31 * 24 * 60 * 60)
+    }
+
+    private var monthTitle: String {
+        "\(calendar.component(.year, from: month)) 年 \(calendar.component(.month, from: month)) 月"
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            header
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+
+            ScrollView {
+                VStack(spacing: 12) {
+                    if categoryMemos.isEmpty {
+                        emptyState
+                    } else {
+                        ForEach(categoryMemos) { memo in
+                            NavigationLink {
+                                memoDestination(memo)
+                            } label: {
+                                StatisticsMemoListCard(memo: memo)
+                                    .statisticsMemoTransitionSource(for: memo.id, in: memoTransitionNamespace)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 132)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .background(Theme.Colors.background.ignoresSafeArea())
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var header: some View {
+        ZStack {
+            VStack(spacing: 4) {
+                Text("\(category.title)便签")
+                    .font(.system(size: 25, weight: .black))
+                    .foregroundStyle(Theme.Colors.text)
+
+                Text("\(monthTitle) · \(categoryMemos.count) 条")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.Colors.muted)
+            }
+            .frame(maxWidth: .infinity)
+
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(Theme.Colors.text)
+                        .frame(width: 44, height: 44)
+                        .background(.white.opacity(0.82))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(.white, lineWidth: 2))
+                        .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 7, y: 3)
+                }
+                .buttonStyle(StatisticsPressStyle())
+                .accessibilityLabel("返回统计")
+
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image("EmptyMemoState")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 154, height: 154)
+                .accessibilityLabel("暂无便签")
+
+            Text("暂无\(category.title)便签")
+                .font(.system(size: 20, weight: .black))
+                .foregroundStyle(Theme.Colors.text)
+
+            Text("这个月还没有对「\(category.title)」便签记录")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Theme.Colors.muted)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 34)
+        .statisticsCard()
+    }
+
+    @ViewBuilder
+    private func memoDestination(_ memo: Memo) -> some View {
+        let detail = StatisticsMemoReadOnlyDetailView(memo: memo)
+            .background(Theme.Colors.background.ignoresSafeArea())
+            .windowBackground(UIColor(Theme.Colors.background))
+            .disablesNavigationDragDismiss()
+
+        if #available(iOS 18.0, *) {
+            detail
+                .navigationTransition(.zoom(sourceID: memo.id, in: memoTransitionNamespace))
+        } else {
+            detail
+        }
+    }
+}
+
+private struct StatisticsMemoListCard: View {
+    let memo: Memo
+
+    private var dateText: String {
+        memo.createdAt.formatted(
+            .dateTime
+                .locale(Locale(identifier: "zh_CN"))
+                .month()
+                .day()
+                .hour()
+                .minute()
+        )
+    }
+
+    private var contentPreview: String {
+        let trimmedContent = memo.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedContent.isEmpty {
+            return trimmedContent
+        }
+
+        let todoPreview = memo.todoItems
+            .map { item in item.isCompleted ? "已完成 \(item.text)" : item.text }
+            .joined(separator: "、")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return todoPreview.isEmpty ? "暂无正文内容" : todoPreview
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(memo.category.iconAsset)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+
+                    Text(memo.category.title)
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(Theme.Colors.text)
+
+                    Spacer(minLength: 0)
+                }
+
+                Text(memo.title)
+                    .font(.system(size: 19, weight: .black))
+                    .foregroundStyle(Theme.Colors.text)
+                    .lineLimit(1)
+
+                Text(contentPreview)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(Theme.Colors.text.opacity(0.78))
+                    .lineLimit(3)
+                    .lineSpacing(4)
+                    .frame(maxWidth: 250, alignment: .leading)
+
+                Text(dateText)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.Colors.muted)
+                    .padding(.top, 6)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .padding(.trailing, 64)
+
+            Image(memo.category.stickerAsset)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 70, height: 70)
+                .opacity(0.92)
+                .padding(.trailing, 14)
+        }
+        .background(Theme.Colors.memoCard)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(.white, lineWidth: 2)
+        )
+        .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 12, y: 6)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct StatisticsMemoReadOnlyDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let memo: Memo
+
+    private var dateText: String {
+        memo.createdAt.formatted(
+            .dateTime
+                .locale(Locale(identifier: "zh_CN"))
+                .year()
+                .month()
+                .day()
+                .hour()
+                .minute()
+        )
+    }
+
+    private var contentText: String {
+        let trimmedContent = memo.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedContent.isEmpty ? "暂无正文内容" : trimmedContent
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            header
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+
+            ScrollView {
+                memoContent
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 132)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .background(Theme.Colors.background.ignoresSafeArea())
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var header: some View {
+        ZStack {
+            Text("便签详情")
+                .font(.system(size: 25, weight: .black))
+                .foregroundStyle(Theme.Colors.text)
+                .frame(maxWidth: .infinity)
+
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(Theme.Colors.text)
+                        .frame(width: 44, height: 44)
+                        .background(.white.opacity(0.82))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(.white, lineWidth: 2))
+                        .shadow(color: Theme.Colors.shadow.opacity(0.10), radius: 7, y: 3)
+                }
+                .buttonStyle(StatisticsPressStyle())
+                .accessibilityLabel("返回分类便签")
+
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var memoContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Image(memo.category.iconAsset)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 26, height: 26)
+
+                Text(memo.category.title)
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(Theme.Colors.text)
+
+                Spacer(minLength: 0)
+            }
+
+            Text(memo.title)
+                .font(.system(size: 24, weight: .black))
+                .foregroundStyle(Theme.Colors.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(dateText)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Theme.Colors.muted)
+
+            Divider()
+                .overlay(Theme.Colors.line.opacity(0.7))
+
+            Text(contentText)
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(Theme.Colors.text.opacity(0.82))
+                .lineSpacing(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !memo.todoItems.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(memo.todoItems) { item in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(item.isCompleted ? Theme.Colors.accentStrong : Theme.Colors.muted)
+                                .padding(.top, 1)
+
+                            Text(item.text)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Theme.Colors.text.opacity(item.isCompleted ? 0.58 : 0.82))
+                                .strikethrough(item.isCompleted, color: Theme.Colors.muted)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(.top, 18)
+    }
+}
+
 private struct StatisticsCalendarDay: Identifiable {
     let id: Int
     let date: Date?
@@ -657,6 +1133,24 @@ private struct StatisticsPressStyle: ButtonStyle {
 }
 
 private extension View {
+    @ViewBuilder
+    func statisticsCategoryTransitionSource(for id: String, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *) {
+            matchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func statisticsMemoTransitionSource(for id: UUID, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *) {
+            matchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
+        }
+    }
+
     func statisticsCard() -> some View {
         background(Theme.Colors.surface.opacity(0.96))
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))

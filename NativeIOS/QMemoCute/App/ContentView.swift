@@ -28,6 +28,7 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .home
     @State private var isTabBarHidden = false
     @State private var isHomeOverlayPresented = false
+    @State private var statisticsEntryID = UUID()
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -43,7 +44,10 @@ struct ContentView: View {
                         isHomeOverlayPresented: $isHomeOverlayPresented
                     )
                 case .categories:
-                    StatisticsView()
+                    StatisticsView(
+                        isTabBarHidden: $isTabBarHidden,
+                        entryID: statisticsEntryID
+                    )
                 case .settings:
                     SettingsView()
                 }
@@ -54,7 +58,11 @@ struct ContentView: View {
                 ZStack(alignment: .bottom) {
                     bottomTabBarChrome
 
-                    CuteNativeTabBar(selectedTab: $selectedTab)
+                    CuteNativeTabBar(selectedTab: $selectedTab) { previousTab, nextTab in
+                        if previousTab != .categories && nextTab == .categories {
+                            statisticsEntryID = UUID()
+                        }
+                    }
                         .padding(.horizontal, 12)
                         .padding(.bottom, 8)
                 }
@@ -67,11 +75,9 @@ struct ContentView: View {
         .windowBackground(UIColor(Theme.Colors.background))
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28), value: isTabBarHidden)
-        .onChange(of: selectedTab) { _, tab in
-            if tab != .home {
-                isTabBarHidden = false
-                isHomeOverlayPresented = false
-            }
+        .onChange(of: selectedTab) {
+            isTabBarHidden = false
+            isHomeOverlayPresented = false
         }
     }
 
@@ -308,11 +314,22 @@ private struct NavigationDragDismissDisabler: UIViewControllerRepresentable {
 
 struct CuteNativeTabBar: View {
     @Binding var selectedTab: AppTab
+    let onSelectTab: (AppTab, AppTab) -> Void
+
+    init(
+        selectedTab: Binding<AppTab>,
+        onSelectTab: @escaping (AppTab, AppTab) -> Void = { _, _ in }
+    ) {
+        _selectedTab = selectedTab
+        self.onSelectTab = onSelectTab
+    }
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(AppTab.allCases) { tab in
                 Button {
+                    let previousTab = selectedTab
+                    onSelectTab(previousTab, tab)
                     withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34)) {
                         selectedTab = tab
                     }

@@ -130,6 +130,11 @@ struct HomeView: View {
         }
         .background(Theme.Colors.background.ignoresSafeArea())
         .windowBackground(UIColor(Theme.Colors.background))
+        .onAppear {
+            guard editorPath.isEmpty else { return }
+            isTabBarHidden = false
+            isHomeOverlayPresented = isSearchPresented || isCreateMenuPresented
+        }
         .onChange(of: editorPath) { _, path in
             isTabBarHidden = !path.isEmpty
         }
